@@ -3,6 +3,8 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import math
+import random
 from collections import deque
 
 def get_demo_traj():
@@ -43,15 +45,32 @@ class DQfDAgent(object):
         self.n_EPISODES = n_episode
         self.env = env
         self.use_per = use_per
+        self.gamma = 0.99
+        self.epsilon = 0.95
+        self.network = DQfDNetwork(5, 1)
 
     def get_action(self, state):
         # epsilon-greedy 적용 #
-        
+        randint = np.random.random(size=(1,))[0]
+        if randint > self.epsilon:
+            return random.randint(2)
+        else:
+            return 1
     
     def update(self):
-        ## TODO
+        pass
+    
+    def jd(q):
+        pass
+    
+    def je(q):
+        pass
 
     def pretrain(self):
+        l1 = l2 = l3 = 0.33
+        frequency = 25
+        for i in range(1000):
+            pass
         ## Do pretrain for 1000 steps
 
     def train(self):
@@ -60,9 +79,16 @@ class DQfDAgent(object):
         test_over_reward = False
         test_min_episode = np.inf
         ###### 1. DO NOT MODIFY FOR TESTING ######
-        
+        env = self.env
+        dqfd_agent = self
+        if self.use_per:
+            self.d_replay = get_demo_traj()
+        else:
+            shape = get_demo_traj().shape
+            self.d_replay = np.random.uniform(size=shape)
+        print(self.d_replay)
         # Do pretrain
-        pretrain()
+        self.pretrain()
         ## TODO
 
 
@@ -72,7 +98,6 @@ class DQfDAgent(object):
             ########### 2. DO NOT MODIFY FOR TESTING  ###########
 
             ## TODO
-
             done = False
             state = env.reset()
 
@@ -97,7 +122,7 @@ class DQfDAgent(object):
                         test_over_reward = True
                         test_min_episode = e
                 ########### 4. DO NOT MODIFY FOR TESTING  ###########
-
+                state = next_state
                 ## TODO
 
             ########### 5. DO NOT MODIFY FOR TESTING  ###########

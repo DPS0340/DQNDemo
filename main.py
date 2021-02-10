@@ -4,7 +4,7 @@ import numpy as np
 import torch
 import gym
 import argparse
-from agent_2 import DQfDAgent, get_demo_traj
+from agent_1 import DQfDAgent, get_demo_traj
 
 #################################################################################
 ############                                                         ############
