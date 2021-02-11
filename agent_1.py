@@ -259,12 +259,12 @@ class Memory():
             agent.target_network(state).max()) + self.epsilon
         self.idx += 1
         self.max = max(self.max, self.idx-1)
+        self.priority = torch.from_numpy(np.array(self.td_errors[:self.max+1], dtype=np.float))
+        self.priority = F.softmax(self.priority)
+        self.priority = self.priority.numpy()
     def sample(self):
         choice = random.randint(0, self.max)
         return self.container[choice]
     def sample_original(self):
-        self.priority = torch.from_numpy(np.array(self.td_errors[:self.max+1], dtype=np.float))
-        self.priority = F.softmax(self.priority)
-        self.priority = self.priority.numpy()
         result = random.choices(self.container[:self.max+1], weights=self.priority)[0]
         return result
