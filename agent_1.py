@@ -2,6 +2,7 @@ import gym
 import numpy as np
 from numpy.core.fromnumeric import shape
 import torch
+from torch._C import device
 import torch.nn as nn
 import torch.nn.functional as F
 import math
@@ -45,12 +46,6 @@ class DQfDNetwork(nn.Module):
 ############                                                  ############
 ##########################################################################
 
-def softmax(x):
-    exped = np.exp(x)
-    softmax_ = lambda k : k / (np.sum(exped) + 0.001)
-    softmax_vector = np.vectorize(softmax_)
-    return softmax_vector(x)
-
 class DQfDAgent(object):
     def __init__(self, env, use_per, n_episode):
         self.n_EPISODES = n_episode
@@ -59,10 +54,11 @@ class DQfDAgent(object):
         self.gamma = 0.95
         self.epsilon = 0.95
         self.low_epsilon = 0.01
-        self.policy_network = DQfDNetwork(4, 2)
-        self.target_network = DQfDNetwork(4, 2)
-        self.frequency = 1
         self.device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+        self.policy_network = DQfDNetwork(4, 2).to(self.device)
+        self.target_network = DQfDNetwork(4, 2).to(self.device)
+        self.frequency = 1
+        torch.autograd.set_detect_anomaly(True)
         print('device is', self.device)
     
     def get_action(self, state):
@@ -84,7 +80,7 @@ class DQfDAgent(object):
         # n은 논문에 나온대로 10 설정 #
 
         if pretrain:
-            self.n = 50
+            self.n = 20
             minibatch = self.sample_minibatch()
         else:
             self.n = 1
@@ -92,24 +88,28 @@ class DQfDAgent(object):
 
         for episode in range(self.n):
             state, action, reward, next_state, done = minibatch[episode]
-            state = torch.from_numpy(state).float()
-            next_state = torch.from_numpy(next_state).float()
+            state = torch.from_numpy(state).float().to(self.device)
+            next_state = torch.from_numpy(next_state).float().to(self.device)
+            next_state.requires_grad = True
             # double_dqn_loss 계산 # 
-            double_dqn_loss = torch.Tensor([(reward + self.gamma * self.get_action(next_state) - self.get_action(state)) ** 2])
-            double_dqn_loss = double_dqn_loss.to(self.device)
-            double_dqn_loss.requires_grad = True
+            double_dqn_loss = self.target_network(next_state).to(self.device).max()
+            double_dqn_loss = double_dqn_loss * self.gamma
+            double_dqn_loss = double_dqn_loss - self.target_network(state).to(self.device).max()
+            double_dqn_loss = double_dqn_loss + reward
+            double_dqn_loss = torch.pow(double_dqn_loss, 2)
             def margin(action1, action2):
                 if action1 == action2:
-                    return 0
-                return 1
+                    return torch.Tensor([0]).to(self.device)
+                return torch.Tensor([1]).to(self.device)
             # margin_classification_loss 계산 #
             partial_margin_classification_loss = torch.Tensor([-99999])
             partial_margin_classification_loss = partial_margin_classification_loss.to(self.device)
             for selected_action in range(2):
                 __state__, _, _, _ = self.env.step(selected_action)
-                __state__ = torch.from_numpy(__state__).float()
-                partial_margin_classification_loss = max(partial_margin_classification_loss, self.get_action(__state__) + margin(action, selected_action))
-            margin_classification_loss = partial_margin_classification_loss - self.get_action(state)
+                __state__ = torch.from_numpy(__state__).float().to(self.device)
+                expect = self.target_network(__state__).to(self.device).max()
+                partial_margin_classification_loss = max(partial_margin_classification_loss, expect + margin(action, selected_action))
+            margin_classification_loss = partial_margin_classification_loss - self.target_network(state).to(self.device).max()
             # n-step returns 계산 #
             n_step_returns = torch.Tensor([reward])
             n_step_returns = n_step_returns.to(self.device)
@@ -118,22 +118,25 @@ class DQfDAgent(object):
             for exp in range(1, self.n):
                 if __done__:
                     break
-                current_n_step_state = torch.from_numpy(current_n_step_state).float()
-                current_n_step_action = self.get_action(current_n_step_state)
+                current_n_step_state = torch.from_numpy(current_n_step_state).float().to(self.device)
+                current_n_step_action = self.target_network(current_n_step_state).to(self.device).max()
                 current_n_step_state, current_reward, __done__, _ = self.env.step(action)
-                n_step_returns += (self.gamma ** exp) * current_reward
+                n_step_returns = n_step_returns + (self.gamma ** exp) * current_reward
             partial_n_step_returns = -99999
             for selected_action in range(2):
                 __state__, _, _, _ = self.env.step(selected_action)
-                __state__ = torch.from_numpy(__state__).float()
-                partial_n_step_returns = max(partial_n_step_returns, self.get_action(__state__) + margin(action, selected_action))
-            n_step_returns + partial_n_step_returns
+                __state__ = torch.from_numpy(__state__).float().to(self.device)
+                expect = self.target_network(__state__).to(self.device).max()
+                partial_n_step_returns = max(partial_n_step_returns, expect + margin(action, selected_action))
+            n_step_returns = n_step_returns + partial_n_step_returns
+            self.policy_network.train()
             # 오차역전파로 기울기 함수 학습 #
             self.policy_network.opt.zero_grad()
             # loss 계산 #
             # L2 정규화는 MSE로 대체 #
-            loss = double_dqn_loss + l1 * margin_classification_loss + l2 * n_step_returns + torch.Tensor([l3 * self.target_network.loss(state, next_state)]).to(self.device)
+            loss = double_dqn_loss + l1 * margin_classification_loss + l2 * n_step_returns + l3 * torch.Tensor([self.target_network.loss(state, next_state)]).to(self.device)
             loss.backward()
+            torch.nn.utils.clip_grad_norm_(self.policy_network.parameters(), 1.0)
             self.policy_network.opt.step()
 
     def sample_minibatch(self):
@@ -190,6 +193,7 @@ class DQfDAgent(object):
             while not done:
                 env.render()
                 ## TODO
+                self.policy_network.eval()
                 action = dqfd_agent.get_action(state)
                 ## TODO
 
