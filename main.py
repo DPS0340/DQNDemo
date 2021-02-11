@@ -21,7 +21,7 @@ def main(use_per):
         env = gym.make('CartPole-v1')
         
         # 한번의 학습에서 최대 250 episode 진행
-        
+
         # DQfDagent 선언
         dqfd_agent = DQfDAgent(env, use_per, n_episode)
         

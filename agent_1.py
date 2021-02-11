@@ -6,6 +6,7 @@ import torch.nn.functional as F
 import math
 import random
 from collections import deque
+import sys
 
 def get_demo_traj():
     return np.load("./demo_traj_2.npy", allow_pickle=True)
@@ -25,13 +26,17 @@ class DQfDNetwork(nn.Module):
         self.f1 = nn.Linear(in_size, HIDDEN_SIZE)
         self.f2 = nn.Linear(HIDDEN_SIZE, HIDDEN_SIZE)
         self.f3 = nn.Linear(HIDDEN_SIZE, out_size)
-        nn.init.uniform_()
+        nn.init.xavier_uniform_(self.f1.weight)
+        nn.init.xavier_uniform_(self.f2.weight)
+        nn.init.xavier_uniform_(self.f3.weight)
+        self.opt = torch.optim.Adam(self.parameters(), lr=0.001)
 
     def forward(self,x):
-        x1 = nn.ReLU6(self.f1(x))
+        x1 = self.f1(x)
         x2 = self.f2(x1)
-        x3 = self.f3(x2)
-        return x3
+        x3 = torch.sigmoid(self.f3(x2))
+        res = torch.tensor([(x3 >= 0.5).int()])
+        return res
 
 ##########################################################################
 ############                                                  ############
@@ -47,30 +52,54 @@ class DQfDAgent(object):
         self.use_per = use_per
         self.gamma = 0.99
         self.epsilon = 0.95
-        self.network = DQfDNetwork(5, 1)
-
+        self.policy_network = DQfDNetwork(4, 1)
+        self.target_network = DQfDNetwork(4, 1)
+        self.target_network.load_state_dict(self.policy_network.state_dict())
+        self.target_network.eval()
+        self.frequency = 50
+    
     def get_action(self, state):
         # epsilon-greedy 적용 #
         randint = np.random.random(size=(1,))[0]
         if randint > self.epsilon:
-            return random.randint(2)
+            return torch.tensor([random.randint(0, 1)])
         else:
-            return 1
+            return self.network.forward(state)
     
-    def update(self):
-        pass
-    
-    def jd(q):
-        pass
-    
-    def je(q):
-        pass
 
+    def train_network(self, state=None, next_state=None, reward=None, action=None, pretrain=False):
+        # 람다값 임의로 설정 #
+        l1 = l2 = l3 = 0.3
+        if pretrain:
+            # pretrain 가지치기 #
+            state, next_state, reward = self.sample_minibatch()
+        # double_dqn_loss 계산 # 
+        double_dqn_loss = (reward + self.gamma * self.target_network.forward(next_state) - self.target_network(state)) ** 2
+        def margin(action1, action2):
+            if action1 == action2:
+                return 0
+            return 1
+        # margin_classification_loss 계산 #
+        partial_margin_classification_loss = -99999
+        for selected_action in range(2):
+            __state__, _, _, _ = self.env.step(selected_action)
+            partial_margin_classification_loss = max(partial_margin_classification_loss, self.target_network.forward(__state__) + margin(action, selected_action))
+        margin_classification_loss = partial_margin_classification_loss - self.target_network.forward(state)
+        # n-step returns 계산 #
+
+        # 오차역전파로 기울기 함수 학습 #
+        self.target_network.opt.zero_grad()
+        loss.backward()
+        self.target_network.opt.step()
+
+    def sample_minibatch(self):
+        pass
     def pretrain(self):
-        l1 = l2 = l3 = 0.33
-        frequency = 25
-        for i in range(1000):
-            pass
+        for i in range(1, 1000 + 1):
+            self.train_network(pretrain=True)
+            if i % self.frequency == 0:
+                self.target_network.load_state_dict(self.policy_network.state_dict())
+
         ## Do pretrain for 1000 steps
 
     def train(self):
@@ -81,12 +110,19 @@ class DQfDAgent(object):
         ###### 1. DO NOT MODIFY FOR TESTING ######
         env = self.env
         dqfd_agent = self
-        if self.use_per:
-            self.d_replay = get_demo_traj()
-        else:
-            shape = get_demo_traj().shape
-            self.d_replay = np.random.uniform(size=shape)
-        print(self.d_replay)
+        self.d_replay = get_demo_traj()
+        print(len(self.d_replay[0]))
+        if not self.use_per:
+            self.d_replay = [[0, 0, 0, 0] for _ in range(len(self.d_replay[0]))]
+            max_vals = [4.8, 'inf', math.radians(24), 'inf']
+            for e in self.d_replay:
+                for i in range(len(e)):
+                    max_val = max_vals[i]
+                    if max_val == 'inf':
+                        max_val = sys.maxsize
+                    min_val = -max_val
+                    sampled = random.uniform(min_val, max_val)
+                    e[i] = sampled
         # Do pretrain
         self.pretrain()
         ## TODO
@@ -101,10 +137,11 @@ class DQfDAgent(object):
             done = False
             state = env.reset()
 
+
             while not done:
                 ## TODO
-
-                action = dqfd_agent.get_action(state)
+                state = torch.from_numpy(state).float()
+                action = dqfd_agent.get_action(state).numpy()[0]
 
                 ## TODO
 
@@ -114,7 +151,7 @@ class DQfDAgent(object):
                 ########### 3. DO NOT MODIFY FOR TESTING  ###########
 
                 ## TODO
-
+                self.train_network(state, next_state, reward, action)
                 ########### 4. DO NOT MODIFY FOR TESTING  ###########
                 if done:
                     test_mean_episode_reward.append(test_episode_reward)
