@@ -186,7 +186,7 @@ class DQfDAgent(object):
             ## TODO
             done = False
             state = env.reset()
-            state = torch.from_numpy(state).float()
+            state = torch.from_numpy(state).float().to(self.device)
             env.render()
 
             while not done:
@@ -197,7 +197,7 @@ class DQfDAgent(object):
                 ## TODO
 
                 next_state, reward, done, _ = env.step(action)
-                next_state = torch.from_numpy(next_state).float()
+                next_state = torch.from_numpy(next_state).float().to(self.device)
                 to_append = [state.numpy(), action, reward, next_state.numpy(), done]
                 buffer.append(np.array(to_append))
                 ########### 3. DO NOT MODIFY FOR TESTING ###########
