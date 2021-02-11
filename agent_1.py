@@ -24,12 +24,13 @@ PRETRAIN_STEP = 1000
 class DQfDNetwork(nn.Module):
     def __init__(self, in_size, out_size):
         super(DQfDNetwork, self).__init__()
-        HIDDEN_SIZE = 64
+        HIDDEN_SIZE = 128
         self.f1 = nn.Linear(in_size, HIDDEN_SIZE)
         self.f2 = nn.Linear(HIDDEN_SIZE, HIDDEN_SIZE)
         self.f3 = nn.Linear(HIDDEN_SIZE, out_size)
-        nn.init.xavier_uniform_(self.f1.weight)
-        nn.init.xavier_uniform_(self.f2.weight)
+        nn.init.kaiming_uniform_(self.f1.weight)
+        nn.init.kaiming_uniform_(self.f2.weight)
+        nn.init.kaiming_uniform_(self.f3.weight)
         self.opt = torch.optim.Adam(self.parameters(), lr=0.001)
         self.loss = torch.nn.MSELoss()
 
@@ -39,22 +40,6 @@ class DQfDNetwork(nn.Module):
         x3 = self.f3(x2)
         res = F.softmax(x3)
         return res
-
-class Memory():
-    def __init__(self, length=500):
-        self.idx = 0
-        self.length = length
-        self.container = [None for _ in range(length)]
-        self.max = 0
-    def push(self, obj):
-        if self.idx == 500:
-            self.idx = 0
-        self.container[self.idx] = obj
-        self.max = max(self.max, self.idx)
-        self.idx += 1
-    def sample(self):
-        choice = random.randint(0, self.max-1)
-        return self.container[choice]
     
 ##########################################################################
 ############                                                  ############
@@ -98,39 +83,43 @@ class DQfDAgent(object):
 
     def train_network(self, args=None, pretrain=False):
         # 람다값 임의로 설정 #
-        l1 = l2 = l3 = 0.1
+        l1 = l2 = l3 = 0.5
 
         if pretrain:
-            self.n = 20
+            self.n = 50
             minibatch = self.sample_minibatch()
         else:
             self.n = 1
             minibatch = [args]
 
         for episode in range(self.n):
-            state, action, reward, next_state, done = minibatch[episode]
+            state, action, reward, next_state, done, cnt = minibatch[episode]
+            if cnt == 500:
+                reward += 50
+            elif done:
+                reward = -5
             state = torch.from_numpy(state).float().to(self.device)
             next_state = torch.from_numpy(next_state).float().to(self.device)
             next_state.requires_grad = True
             # double_dqn_loss 계산 # 
             double_dqn_loss = self.target_network(next_state).to(self.device).max()
             double_dqn_loss = double_dqn_loss * self.gamma
-            double_dqn_loss = double_dqn_loss - self.target_network(state).to(self.device).max()
+            double_dqn_loss = double_dqn_loss - self.target_network(state).to(self.device).detach().cpu().numpy()[action]
             double_dqn_loss = double_dqn_loss + reward
             double_dqn_loss = torch.pow(double_dqn_loss, 2)
             def margin(action1, action2):
                 if action1 == action2:
                     return torch.Tensor([0]).to(self.device)
-                return torch.Tensor([0.2]).to(self.device)
+                return torch.Tensor([1]).to(self.device)
             # margin_classification_loss 계산 #
             partial_margin_classification_loss = torch.Tensor([0])
             partial_margin_classification_loss = partial_margin_classification_loss.to(self.device)
             for selected_action in range(2):
                 __state__, _, _, _ = self.env.step(selected_action)
                 __state__ = torch.from_numpy(__state__).float().to(self.device)
-                expect = self.target_network(__state__).to(self.device).max()
+                expect = self.target_network(__state__).to(self.device).detach().cpu().numpy()[selected_action]
                 partial_margin_classification_loss = max(partial_margin_classification_loss, expect + margin(action, selected_action))
-            margin_classification_loss = partial_margin_classification_loss - self.target_network(state).to(self.device).max()
+            margin_classification_loss = partial_margin_classification_loss - self.target_network(state).detach().cpu().numpy()[action]
             # n-step returns 계산 #
             n_step_returns = torch.Tensor([reward])
             n_step_returns = n_step_returns.to(self.device)
@@ -155,21 +144,21 @@ class DQfDAgent(object):
             self.policy_network.opt.zero_grad()
             # loss 계산 #
             # L2 정규화는 MSE로 대체 #
-            loss = double_dqn_loss + l1 * margin_classification_loss + l2 * n_step_returns + l3 * torch.Tensor([self.policy_network.loss(state, next_state)]).to(self.device)
+            loss = double_dqn_loss + l1 * margin_classification_loss + l2 * n_step_returns + l3 * self.policy_network.loss(state, next_state)
             loss.backward()
             torch.nn.utils.clip_grad_norm_(self.policy_network.parameters(), 1.0)
             self.policy_network.opt.step()
 
     def sample_minibatch(self):
         # softmax 함수 사용 #
-        if self.use_per:
-            pass
-        else:
-            result = []
-            for _ in range(self.n):
+        result = []
+        for _ in range(self.n):
+            if self.use_per:
+                choice = self.memory.sample_original()
+            else:
                 choice = self.memory.sample()
-                result.append(choice)
-            return result
+        result.append(choice)
+        return result
 
     def pretrain(self):
         for i in range(PRETRAIN_STEP):
@@ -192,9 +181,10 @@ class DQfDAgent(object):
         dqfd_agent = self
         self.d_replay = get_demo_traj()
         for e in self.d_replay:
+            cnt = 0
             for obj in e:
-                self.memory.push(obj)
-        self.td_errors = []
+                cnt += 1
+                self.memory.push([*obj, cnt])
         # Do pretrain
         self.pretrain()
         ## TODO
@@ -208,8 +198,9 @@ class DQfDAgent(object):
             done = False
             state = env.reset()
             state = torch.from_numpy(state).float().to(self.device)
+            self.policy_network.eval()
             env.render()
-
+            cnt = 0
             while not done:
                 env.render()
                 ## TODO
@@ -218,17 +209,13 @@ class DQfDAgent(object):
 
                 next_state, reward, done, _ = env.step(action)
                 next_state = torch.from_numpy(next_state).float().to(self.device)
-                to_append = [state.cpu().numpy(), action, reward, next_state.cpu().numpy(), done]
+                to_append = [state.cpu().numpy(), action, reward, next_state.cpu().numpy(), done, cnt]
                 self.memory.push(to_append)
+                cnt += 1
                 ########### 3. DO NOT MODIFY FOR TESTING ###########
                 test_episode_reward += reward      
                 ########### 3. DO NOT MODIFY FOR TESTING  ###########
                 ## TODO
-                if reward == 500:
-                    reward += 100
-                elif done:
-                    reward = -100
-                self.train_network()
                 ########### 4. DO NOT MODIFY FOR TESTING  ###########
                 if done:
                     test_mean_episode_reward.append(test_episode_reward)
@@ -243,9 +230,38 @@ class DQfDAgent(object):
                 print("END train function")
                 break
             ########### 5. DO NOT MODIFY FOR TESTING  ###########
+            self.train_network(pretrain=True)
             if e % self.frequency == 0:
                 self.target_network.load_state_dict(self.policy_network.state_dict())
-
         ########### 6. DO NOT MODIFY FOR TESTING  ###########
         return test_min_episode, np.mean(test_mean_episode_reward)
         ########### 6. DO NOT MODIFY FOR TESTING  ###########
+
+
+class Memory():
+    def __init__(self, length=500):
+        self.idx = 0
+        self.length = length
+        self.container = [None for _ in range(length)]
+        self.td_errors = [None for _ in range(length)]
+        self.priority = [None for _ in range(length)]
+        self.max = 0
+        self.epsilon = 0.001
+    def push(self, obj, agent: DQfDAgent):
+        if self.idx == 500:
+            self.idx = 0
+        self.container[self.idx] = obj
+        state, action, reward, next_state, done, cnt = obj
+        self.td_errors[self.idx] = abs(reward + (1.0 - done) * agent.gamma * \
+            agent.target_network(next_state).max() - \
+            agent.target_network(state).max()) + self.epsilon
+        self.idx += 1
+        self.max = max(self.max, self.idx-1)
+    def sample(self):
+        choice = random.randint(0, self.max)
+        return self.container[choice]
+    def sample_original(self):
+        self.priority = torch.from_numpy(np.array(self.td_errors))
+        self.priority = F.softmax(self.priority)
+        self.priority = self.priority.numpy()
+        return np.random.choice(self.container, p=self.priority)
