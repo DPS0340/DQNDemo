@@ -19,27 +19,43 @@ def get_demo_traj():
 ############                                                  ############
 ##########################################################################
 
-
+PRETRAIN_STEP = 1000
 
 class DQfDNetwork(nn.Module):
     def __init__(self, in_size, out_size):
         super(DQfDNetwork, self).__init__()
-        HIDDEN_SIZE = 256
+        HIDDEN_SIZE = 64
         self.f1 = nn.Linear(in_size, HIDDEN_SIZE)
         self.f2 = nn.Linear(HIDDEN_SIZE, HIDDEN_SIZE)
         self.f3 = nn.Linear(HIDDEN_SIZE, out_size)
         nn.init.xavier_uniform_(self.f1.weight)
         nn.init.xavier_uniform_(self.f2.weight)
-        self.opt = torch.optim.Adam(self.parameters(), lr=0.01)
-        self.loss = torch.nn.MSELoss(reduction='sum')
+        self.opt = torch.optim.Adam(self.parameters(), lr=0.001)
+        self.loss = torch.nn.MSELoss()
 
     def forward(self,x):
         x1 = F.relu6(self.f1(x))
         x2 = F.relu6(self.f2(x1))
-        x3 = F.relu6(self.f3(x2))
+        x3 = self.f3(x2)
         res = F.softmax(x3)
         return res
 
+class Memory():
+    def __init__(self, length=500):
+        self.idx = 0
+        self.length = length
+        self.container = [None for _ in range(length)]
+        self.max = 0
+    def push(self, obj):
+        if self.idx == 500:
+            self.idx = 0
+        self.container[self.idx] = obj
+        self.max = max(self.max, self.idx)
+        self.idx += 1
+    def sample(self):
+        choice = random.randint(0, self.max-1)
+        return self.container[choice]
+    
 ##########################################################################
 ############                                                  ############
 ############                  DQfDagent 구현                   ############
@@ -51,19 +67,26 @@ class DQfDAgent(object):
         self.n_EPISODES = n_episode
         self.env = env
         self.use_per = use_per
-        self.gamma = 0.95
-        self.epsilon = 0.95
-        self.low_epsilon = 0.01
+        self.gamma = 0.99
+        self.epsilon = 1.0
+        self.epsilon_decay = 0.999
+        self.epsilon_min = 0.001
         self.device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
-        self.policy_network = DQfDNetwork(4, 2).to(self.device)
-        self.target_network = DQfDNetwork(4, 2).to(self.device)
+        env.render()
+        state_size = env.observation_space.shape[0]
+        action_size = env.action_space.n
+        self.policy_network = DQfDNetwork(state_size, action_size).to(self.device)
+        self.target_network = DQfDNetwork(state_size, action_size).to(self.device)
         self.frequency = 1
+        self.memory = Memory()
         print('device is', self.device)
     
     def get_action(self, state):
+        if self.epsilon > self.epsilon_min:
+            self.epsilon *= self.epsilon_decay
         # epsilon-greedy 적용 #
         randint = random.random()
-        if randint >= self.epsilon:
+        if randint <= self.epsilon:
             return random.randint(0, 1)
         else:
             self.policy_network.eval()
@@ -75,7 +98,7 @@ class DQfDAgent(object):
 
     def train_network(self, args=None, pretrain=False):
         # 람다값 임의로 설정 #
-        l1 = l2 = l3 = 0.2
+        l1 = l2 = l3 = 0.1
 
         if pretrain:
             self.n = 20
@@ -100,7 +123,7 @@ class DQfDAgent(object):
                     return torch.Tensor([0]).to(self.device)
                 return torch.Tensor([0.2]).to(self.device)
             # margin_classification_loss 계산 #
-            partial_margin_classification_loss = torch.Tensor([-99999])
+            partial_margin_classification_loss = torch.Tensor([0])
             partial_margin_classification_loss = partial_margin_classification_loss.to(self.device)
             for selected_action in range(2):
                 __state__, _, _, _ = self.env.step(selected_action)
@@ -120,7 +143,7 @@ class DQfDAgent(object):
                 current_n_step_action = self.target_network(current_n_step_state).to(self.device).max()
                 current_n_step_state, current_reward, __done__, _ = self.env.step(action)
                 n_step_returns = n_step_returns + (self.gamma ** exp) * current_reward
-            partial_n_step_returns = -99999
+            partial_n_step_returns = torch.Tensor([0]).to(self.device)
             for selected_action in range(2):
                 __state__, _, _, _ = self.env.step(selected_action)
                 __state__ = torch.from_numpy(__state__).float().to(self.device)
@@ -132,7 +155,7 @@ class DQfDAgent(object):
             self.policy_network.opt.zero_grad()
             # loss 계산 #
             # L2 정규화는 MSE로 대체 #
-            loss = double_dqn_loss + l1 * margin_classification_loss + l2 * n_step_returns + l3 * torch.Tensor([self.target_network.loss(state, next_state)]).to(self.device)
+            loss = double_dqn_loss + l1 * margin_classification_loss + l2 * n_step_returns + l3 * torch.Tensor([self.policy_network.loss(state, next_state)]).to(self.device)
             loss.backward()
             torch.nn.utils.clip_grad_norm_(self.policy_network.parameters(), 1.0)
             self.policy_network.opt.step()
@@ -144,14 +167,12 @@ class DQfDAgent(object):
         else:
             result = []
             for _ in range(self.n):
-                choice = random.randint(0, self.d_replay.shape[0]-1)
-                choice = self.d_replay[choice]
-                choice = random.choice(choice)
+                choice = self.memory.sample()
                 result.append(choice)
             return result
 
     def pretrain(self):
-        for i in range(1000):
+        for i in range(PRETRAIN_STEP):
             print(f"{i} pretrain step")
             self.train_network(pretrain=True)
             if i % self.frequency == 0:
@@ -170,12 +191,13 @@ class DQfDAgent(object):
         env.render()
         dqfd_agent = self
         self.d_replay = get_demo_traj()
+        for e in self.d_replay:
+            for obj in e:
+                self.memory.push(obj)
         self.td_errors = []
         # Do pretrain
         self.pretrain()
         ## TODO
-
-        buffer = []
 
         for e in range(self.n_EPISODES):
             ########### 2. DO NOT MODIFY FOR TESTING ###########
@@ -197,13 +219,16 @@ class DQfDAgent(object):
                 next_state, reward, done, _ = env.step(action)
                 next_state = torch.from_numpy(next_state).float().to(self.device)
                 to_append = [state.cpu().numpy(), action, reward, next_state.cpu().numpy(), done]
-                buffer.append(np.array(to_append))
+                self.memory.push(to_append)
                 ########### 3. DO NOT MODIFY FOR TESTING ###########
                 test_episode_reward += reward      
                 ########### 3. DO NOT MODIFY FOR TESTING  ###########
-
                 ## TODO
-                self.train_network(np.array(to_append))
+                if reward == 500:
+                    reward += 100
+                elif done:
+                    reward = -100
+                self.train_network()
                 ########### 4. DO NOT MODIFY FOR TESTING  ###########
                 if done:
                     test_mean_episode_reward.append(test_episode_reward)
@@ -213,10 +238,6 @@ class DQfDAgent(object):
                 ########### 4. DO NOT MODIFY FOR TESTING  ###########
                 state = next_state
                 ## TODO
-            self.d_replay = self.d_replay.tolist()
-            self.d_replay.append(buffer)
-            self.d_replay = np.array(self.d_replay)
-            buffer = []
             ########### 5. DO NOT MODIFY FOR TESTING  ###########
             if test_over_reward:
                 print("END train function")
