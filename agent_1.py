@@ -58,7 +58,6 @@ class DQfDAgent(object):
         self.policy_network = DQfDNetwork(4, 2).to(self.device)
         self.target_network = DQfDNetwork(4, 2).to(self.device)
         self.frequency = 1
-        torch.autograd.set_detect_anomaly(True)
         print('device is', self.device)
     
     def get_action(self, state):
