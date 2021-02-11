@@ -66,10 +66,10 @@ class DQfDAgent(object):
         if randint >= self.epsilon:
             return random.randint(0, 1)
         else:
-            predicted = self.policy_network.forward(state)
-            m = torch.distributions.Categorical(predicted)
-            action = m.sample()
-            action = action.numpy()
+            self.policy_network.eval()
+            predicted = self.policy_network.forward(state).to(self.device)
+            action = torch.argmax(predicted)
+            action = action.cpu().numpy()
             return action
     
 
@@ -192,13 +192,12 @@ class DQfDAgent(object):
             while not done:
                 env.render()
                 ## TODO
-                self.policy_network.eval()
                 action = dqfd_agent.get_action(state)
                 ## TODO
 
                 next_state, reward, done, _ = env.step(action)
                 next_state = torch.from_numpy(next_state).float().to(self.device)
-                to_append = [state.numpy(), action, reward, next_state.numpy(), done]
+                to_append = [state.cpu().numpy(), action, reward, next_state.cpu().numpy(), done]
                 buffer.append(np.array(to_append))
                 ########### 3. DO NOT MODIFY FOR TESTING ###########
                 test_episode_reward += reward      
