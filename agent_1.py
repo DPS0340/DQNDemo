@@ -76,7 +76,6 @@ class DQfDAgent(object):
     def train_network(self, args=None, pretrain=False):
         # 람다값 임의로 설정 #
         l1 = l2 = l3 = 0.2
-        # n은 논문에 나온대로 10 설정 #
 
         if pretrain:
             self.n = 20
@@ -99,7 +98,7 @@ class DQfDAgent(object):
             def margin(action1, action2):
                 if action1 == action2:
                     return torch.Tensor([0]).to(self.device)
-                return torch.Tensor([1]).to(self.device)
+                return torch.Tensor([0.2]).to(self.device)
             # margin_classification_loss 계산 #
             partial_margin_classification_loss = torch.Tensor([-99999])
             partial_margin_classification_loss = partial_margin_classification_loss.to(self.device)
