@@ -29,13 +29,13 @@ class DQfDNetwork(nn.Module):
         self.f3 = nn.Linear(HIDDEN_SIZE, out_size)
         nn.init.xavier_uniform_(self.f1.weight)
         nn.init.xavier_uniform_(self.f2.weight)
-        self.opt = torch.optim.Adam(self.parameters(), lr=0.001)
+        self.opt = torch.optim.Adam(self.parameters(), lr=0.01)
         self.loss = torch.nn.MSELoss(reduction='sum')
 
     def forward(self,x):
-        x1 = F.relu(self.f1(x))
-        x2 = self.f2(x1)
-        x3 = self.f3(x2)
+        x1 = F.relu6(self.f1(x))
+        x2 = F.relu6(self.f2(x1))
+        x3 = F.relu6(self.f3(x2))
         res = F.softmax(x3)
         return res
 
@@ -56,12 +56,14 @@ class DQfDAgent(object):
         self.n_EPISODES = n_episode
         self.env = env
         self.use_per = use_per
-        self.gamma = 0.99
-        self.epsilon = 0.98
+        self.gamma = 0.95
+        self.epsilon = 0.95
         self.low_epsilon = 0.01
         self.policy_network = DQfDNetwork(4, 2)
         self.target_network = DQfDNetwork(4, 2)
         self.frequency = 1
+        self.device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+        print('device is', self.device)
     
     def get_action(self, state):
         # epsilon-greedy 적용 #
@@ -78,11 +80,11 @@ class DQfDAgent(object):
 
     def train_network(self, args=None, pretrain=False):
         # 람다값 임의로 설정 #
-        l1 = l2 = l3 = 0.15
+        l1 = l2 = l3 = 0.2
         # n은 논문에 나온대로 10 설정 #
 
         if pretrain:
-            self.n = 10
+            self.n = 50
             minibatch = self.sample_minibatch()
         else:
             self.n = 1
@@ -94,6 +96,7 @@ class DQfDAgent(object):
             next_state = torch.from_numpy(next_state).float()
             # double_dqn_loss 계산 # 
             double_dqn_loss = torch.Tensor([(reward + self.gamma * self.get_action(next_state) - self.get_action(state)) ** 2])
+            double_dqn_loss = double_dqn_loss.to(self.device)
             double_dqn_loss.requires_grad = True
             def margin(action1, action2):
                 if action1 == action2:
@@ -101,6 +104,7 @@ class DQfDAgent(object):
                 return 1
             # margin_classification_loss 계산 #
             partial_margin_classification_loss = torch.Tensor([-99999])
+            partial_margin_classification_loss = partial_margin_classification_loss.to(self.device)
             for selected_action in range(2):
                 __state__, _, _, _ = self.env.step(selected_action)
                 __state__ = torch.from_numpy(__state__).float()
@@ -108,6 +112,7 @@ class DQfDAgent(object):
             margin_classification_loss = partial_margin_classification_loss - self.get_action(state)
             # n-step returns 계산 #
             n_step_returns = torch.Tensor([reward])
+            n_step_returns = n_step_returns.to(self.device)
             current_n_step_action = action
             current_n_step_state, current_reward, __done__, _ = self.env.step(current_n_step_action)
             for exp in range(1, self.n):
@@ -127,7 +132,7 @@ class DQfDAgent(object):
             self.policy_network.opt.zero_grad()
             # loss 계산 #
             # L2 정규화는 MSE로 대체 #
-            loss = double_dqn_loss + l1 * margin_classification_loss + l2 * n_step_returns + torch.Tensor([l3 * self.target_network.loss(state, next_state)])
+            loss = double_dqn_loss + l1 * margin_classification_loss + l2 * n_step_returns + torch.Tensor([l3 * self.target_network.loss(state, next_state)]).to(self.device)
             loss.backward()
             self.policy_network.opt.step()
 
@@ -145,7 +150,7 @@ class DQfDAgent(object):
             return result
 
     def pretrain(self):
-        for i in range(100):
+        for i in range(1000):
             print(f"{i} pretrain step")
             self.train_network(pretrain=True)
             if i % self.frequency == 0:
