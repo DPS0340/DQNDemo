@@ -157,7 +157,7 @@ class DQfDAgent(object):
                 choice = self.memory.sample_original()
             else:
                 choice = self.memory.sample()
-        result.append(choice)
+            result.append(choice)
         return result
 
     def pretrain(self):
@@ -184,7 +184,7 @@ class DQfDAgent(object):
             cnt = 0
             for obj in e:
                 cnt += 1
-                self.memory.push([*obj, cnt])
+                self.memory.push([*obj, cnt], self)
         # Do pretrain
         self.pretrain()
         ## TODO
@@ -210,7 +210,7 @@ class DQfDAgent(object):
                 next_state, reward, done, _ = env.step(action)
                 next_state = torch.from_numpy(next_state).float().to(self.device)
                 to_append = [state.cpu().numpy(), action, reward, next_state.cpu().numpy(), done, cnt]
-                self.memory.push(to_append)
+                self.memory.push(to_append, self)
                 cnt += 1
                 ########### 3. DO NOT MODIFY FOR TESTING ###########
                 test_episode_reward += reward      
@@ -252,6 +252,8 @@ class Memory():
             self.idx = 0
         self.container[self.idx] = obj
         state, action, reward, next_state, done, cnt = obj
+        state = torch.from_numpy(state).to(agent.device)
+        next_state = torch.from_numpy(next_state).to(agent.device)
         self.td_errors[self.idx] = abs(reward + (1.0 - done) * agent.gamma * \
             agent.target_network(next_state).max() - \
             agent.target_network(state).max()) + self.epsilon
@@ -261,7 +263,8 @@ class Memory():
         choice = random.randint(0, self.max)
         return self.container[choice]
     def sample_original(self):
-        self.priority = torch.from_numpy(np.array(self.td_errors))
+        self.priority = torch.from_numpy(np.array(self.td_errors[:self.max+1], dtype=np.float))
         self.priority = F.softmax(self.priority)
         self.priority = self.priority.numpy()
-        return np.random.choice(self.container, p=self.priority)
+        result = random.choices(self.container[:self.max+1], weights=self.priority)[0]
+        return result
