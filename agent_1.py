@@ -24,7 +24,7 @@ PRETRAIN_STEP = 1000
 class DQfDNetwork(nn.Module):
     def __init__(self, in_size, out_size):
         super(DQfDNetwork, self).__init__()
-        HIDDEN_SIZE = 256
+        HIDDEN_SIZE = 128
         self.f1 = nn.Linear(in_size, HIDDEN_SIZE)
         self.f2 = nn.Linear(HIDDEN_SIZE, HIDDEN_SIZE)
         self.f3 = nn.Linear(HIDDEN_SIZE, out_size)
@@ -82,7 +82,7 @@ class DQfDAgent(object):
 
     def train_network(self, args=None, pretrain=False):
         # 람다값 임의로 설정 #
-        l1 = l2 = l3 = 0.5
+        l1 = l2 = l3 = 0.35
 
         if pretrain:
             self.n = 100
@@ -110,7 +110,7 @@ class DQfDAgent(object):
             def margin(action1, action2):
                 if action1 == action2:
                     return torch.Tensor([0]).to(self.device)
-                return torch.Tensor([0.1]).to(self.device)
+                return torch.Tensor([1]).to(self.device)
             # margin_classification_loss 계산 #
             partial_margin_classification_loss = torch.Tensor([-999999])
             partial_margin_classification_loss = partial_margin_classification_loss.to(self.device)
