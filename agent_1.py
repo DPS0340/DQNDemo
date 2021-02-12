@@ -120,8 +120,8 @@ class DQfDAgent(object):
             margin_classification_loss = partial_margin_classification_loss - self.target_network(state).detach().cpu().numpy()[action]
             # n-step returns 계산 #
             current_n_step_action = action
-            current_n_step_state, current_n_step_reward, __done__, _ = self.env.step(current_n_step_action)
-            n_step_returns = torch.Tensor([current_n_step_reward])
+            current_n_step_state, current_n_step_reward, __done__ = next_state, reward, done
+            n_step_returns = torch.Tensor([reward])
             n_step_returns = n_step_returns.to(self.device)
             for exp in range(1, 10):
                 if __done__:
