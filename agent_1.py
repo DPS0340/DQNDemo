@@ -31,7 +31,7 @@ class DQfDNetwork(nn.Module):
         nn.init.kaiming_uniform_(self.f1.weight)
         nn.init.kaiming_uniform_(self.f2.weight)
         nn.init.kaiming_uniform_(self.f3.weight)
-        self.opt = torch.optim.Adam(self.parameters(), lr=0.002)
+        self.opt = torch.optim.Adam(self.parameters(), lr=0.005)
         self.loss = torch.nn.MSELoss()
 
     def forward(self,x):
@@ -97,7 +97,7 @@ class DQfDAgent(object):
             if gain == 500:
                 gain += 50
             elif done:
-                gain = -1
+                gain = -100
             state = torch.from_numpy(state).float().to(self.device)
             next_state = torch.from_numpy(next_state).float().to(self.device)
             next_state.requires_grad = True
