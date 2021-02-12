@@ -24,7 +24,7 @@ PRETRAIN_STEP = 1000
 class DQfDNetwork(nn.Module):
     def __init__(self, in_size, out_size):
         super(DQfDNetwork, self).__init__()
-        HIDDEN_SIZE = 128
+        HIDDEN_SIZE = 256
         self.f1 = nn.Linear(in_size, HIDDEN_SIZE)
         self.f2 = nn.Linear(HIDDEN_SIZE, HIDDEN_SIZE)
         self.f3 = nn.Linear(HIDDEN_SIZE, out_size)
@@ -82,7 +82,7 @@ class DQfDAgent(object):
 
     def train_network(self, args=None, pretrain=False):
         # 람다값 임의로 설정 #
-        l1 = l2 = l3 = 0.35
+        l1 = l2 = l3 = 0.5
 
         if pretrain:
             self.n = 50
@@ -96,7 +96,7 @@ class DQfDAgent(object):
             if gain == 500:
                 gain += 50
             elif done:
-                gain = -10
+                gain = -100
             state = torch.from_numpy(state).float().to(self.device)
             next_state = torch.from_numpy(next_state).float().to(self.device)
             next_state.requires_grad = True
@@ -203,9 +203,10 @@ class DQfDAgent(object):
 
                 next_state, reward, done, _ = env.step(action)
                 next_state = torch.from_numpy(next_state).float().to(self.device)
+                if not done:
+                    cnt += 1
                 to_append = [state.cpu().numpy(), action, reward, next_state.cpu().numpy(), done, cnt]
                 self.memory.push(to_append, self)
-                cnt += 1
                 ########### 3. DO NOT MODIFY FOR TESTING ###########
                 test_episode_reward += reward      
                 ########### 3. DO NOT MODIFY FOR TESTING  ###########
