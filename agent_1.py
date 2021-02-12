@@ -18,8 +18,8 @@ def get_demo_traj():
 ############                                                  ############
 ##########################################################################
 
-PRETRAIN_STEP = 100
-MINIBATCH_SIZE = 40
+PRETRAIN_STEP = 1000
+MINIBATCH_SIZE = 100
 RUNNING_MINIBATCH_SIZE = 20
 
 class DQfDNetwork(nn.Module):
@@ -79,7 +79,7 @@ class DQfDAgent(object):
                 self.policy_network.eval()
                 predicted = self.policy_network(state).to(self.device)
                 action = torch.argmax(predicted)
-                action = action.cpu().numpy()
+                action = action.cpu().numpy().item()
                 return action
         
 
