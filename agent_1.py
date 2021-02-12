@@ -20,6 +20,7 @@ def get_demo_traj():
 
 PRETRAIN_STEP = 1000
 MINIBATCH_SIZE = 100
+RUNNING_MINIBATCH_SIZE = 25
 
 class DQfDNetwork(nn.Module):
     def __init__(self, in_size, out_size):
@@ -31,7 +32,7 @@ class DQfDNetwork(nn.Module):
         nn.init.kaiming_uniform_(self.f1.weight)
         nn.init.kaiming_uniform_(self.f2.weight)
         nn.init.kaiming_uniform_(self.f3.weight)
-        self.opt = torch.optim.Adam(self.parameters(), lr=0.01)
+        self.opt = torch.optim.Adam(self.parameters(), lr=0.005)
         self.loss = torch.nn.MSELoss()
 
     def forward(self,x):
@@ -53,9 +54,10 @@ class DQfDAgent(object):
         self.use_per = use_per
         self.gamma = 0.95
         self.epsilon = 1.0
-        self.epsilon_decay = 0.999
+        self.epsilon_decay = 0.995
         self.epsilon_min = 0.001
-        self.device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+        # self.device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+        self.device = torch.device('cpu')
         self.state_size = env.observation_space.shape[0]
         self.action_size = env.action_space.n
         self.policy_network = DQfDNetwork(self.state_size, self.action_size).to(self.device)
@@ -79,12 +81,12 @@ class DQfDAgent(object):
             return action
     
 
-    def train_network(self, args=None, pretrain=False):
+    def train_network(self, args=None, pretrain=False, minibatch_size=MINIBATCH_SIZE):
         # 람다값 임의로 설정 #
         l1 = l2 = l3 = 0.2
 
         if pretrain:
-            self.n = MINIBATCH_SIZE
+            self.n = minibatch_size
             minibatch = self.sample_minibatch(self.n, continuous=False)
         else:
             self.n = 1
@@ -93,7 +95,6 @@ class DQfDAgent(object):
         for episode in range(self.n):
             state, action, reward, next_state, done, gain = minibatch[episode]
             self.target_network.eval()
-            # 누적 reward인 gain을 reward function으로 사용 #
             state = torch.from_numpy(state).float().to(self.device)
             next_state = torch.from_numpy(next_state).float().to(self.device)
             next_state.requires_grad = True
@@ -213,7 +214,9 @@ class DQfDAgent(object):
                 ########### 3. DO NOT MODIFY FOR TESTING ###########
                 test_episode_reward += reward      
                 ########### 3. DO NOT MODIFY FOR TESTING  ###########
-                self.train_network(to_append)
+                self.train_network(pretrain=True, minibatch_size=RUNNING_MINIBATCH_SIZE)
+                if done:
+                    print(f"reward is {test_episode_reward}")
                 ########### 4. DO NOT MODIFY FOR TESTING  ###########
                 if done:
                     test_mean_episode_reward.append(test_episode_reward)
@@ -221,10 +224,9 @@ class DQfDAgent(object):
                         test_over_reward = True
                         test_min_episode = e
                 ########### 4. DO NOT MODIFY FOR TESTING  ###########
-            state = next_state
-            self.train_network(pretrain=True)
-            if e % self.frequency == 0:
-                self.target_network.load_state_dict(self.policy_network.state_dict())
+                state = next_state
+                if e % self.frequency == 0:
+                    self.target_network.load_state_dict(self.policy_network.state_dict())
             ########### 5. DO NOT MODIFY FOR TESTING  ###########
             if test_over_reward:
                 print("END train function")
@@ -236,7 +238,7 @@ class DQfDAgent(object):
 
 
 class Memory():
-    def __init__(self, length=500):
+    def __init__(self, length=5000):
         self.idx = 0
         self.length = length
         self.container = [None for _ in range(length)]
