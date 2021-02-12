@@ -56,12 +56,13 @@ class DQfDAgent(object):
         self.epsilon = 1.0
         self.epsilon_decay = 0.999
         self.epsilon_min = 0.001
-        self.device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
-        state_size = env.observation_space.shape[0]
-        action_size = env.action_space.n
-        self.policy_network = DQfDNetwork(state_size, action_size).to(self.device)
-        self.target_network = DQfDNetwork(state_size, action_size).to(self.device)
-        self.frequency = 1
+        # self.device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+        self.device = torch.device('cpu')
+        self.state_size = env.observation_space.shape[0]
+        self.action_size = env.action_space.n
+        self.policy_network = DQfDNetwork(self.state_size, self.action_size).to(self.device)
+        self.target_network = DQfDNetwork(self.state_size, self.action_size).to(self.device)
+        self.frequency = 5
         self.memory = Memory()
         print('device is', self.device)
     
@@ -71,7 +72,7 @@ class DQfDAgent(object):
         # epsilon-greedy 적용 #
         randint = random.random()
         if randint <= self.epsilon:
-            return random.randint(0, 1)
+            return random.randint(0, self.action_size-1)
         else:
             self.policy_network.eval()
             predicted = self.policy_network.forward(state).to(self.device)
