@@ -2,7 +2,6 @@ import gym
 import numpy as np
 from numpy.core.fromnumeric import shape
 import torch
-from torch._C import device
 import torch.nn as nn
 import torch.nn.functional as F
 import math
@@ -20,7 +19,7 @@ def get_demo_traj():
 ##########################################################################
 
 PRETRAIN_STEP = 1000
-MINIBATCH_SIZE = 50
+MINIBATCH_SIZE = 100
 
 class DQfDNetwork(nn.Module):
     def __init__(self, in_size, out_size):
@@ -53,7 +52,7 @@ class DQfDAgent(object):
         self.env = env
         self.use_per = use_per
         self.gamma = 0.99
-        self.epsilon = 0.001
+        self.epsilon = 0.1
         self.epsilon_decay = 0.999
         self.epsilon_min = 0.001
         # self.device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
@@ -83,7 +82,7 @@ class DQfDAgent(object):
 
     def train_network(self, args=None, pretrain=False):
         # 람다값 임의로 설정 #
-        l1 = l2 = l3 = 0.35
+        l1 = l2 = l3 = 0.2
 
         if pretrain:
             self.n = MINIBATCH_SIZE
@@ -219,6 +218,7 @@ class DQfDAgent(object):
                 ########### 3. DO NOT MODIFY FOR TESTING ###########
                 test_episode_reward += reward      
                 ########### 3. DO NOT MODIFY FOR TESTING  ###########
+                self.train_network(to_append)
                 ########### 4. DO NOT MODIFY FOR TESTING  ###########
                 if done:
                     test_mean_episode_reward.append(test_episode_reward)
