@@ -128,7 +128,7 @@ class DQfDAgent(object):
                 if __done__:
                     break
                 n_step_returns = n_step_returns + (self.gamma ** exp) * current_n_step_reward
-            expect = self.target_network(torch.from_numpy(current_n_step_next_state).detach().cpu().numpy()).max()
+            expect = self.target_network(torch.from_numpy(current_n_step_next_state).to(self.device)).max()
             partial_n_step_returns = (self.gamma ** 10) * expect
             n_step_returns = n_step_returns + partial_n_step_returns
             self.policy_network.train()
