@@ -20,6 +20,7 @@ def get_demo_traj():
 ##########################################################################
 
 PRETRAIN_STEP = 1000
+MINIBATCH_SIZE = 100
 
 class DQfDNetwork(nn.Module):
     def __init__(self, in_size, out_size):
@@ -86,8 +87,8 @@ class DQfDAgent(object):
         l1 = l2 = l3 = 0.35
 
         if pretrain:
-            self.n = 100
-            minibatch = self.sample_minibatch()
+            self.n = MINIBATCH_SIZE
+            minibatch = self.sample_minibatch(self.n, continuous=True)
         else:
             self.n = 1
             minibatch = [args]
@@ -111,7 +112,7 @@ class DQfDAgent(object):
             def margin(action1, action2):
                 if action1 == action2:
                     return torch.Tensor([0]).to(self.device)
-                return torch.Tensor([1]).to(self.device)
+                return torch.Tensor([0.2]).to(self.device)
             # margin_classification_loss 계산 #
             partial_margin_classification_loss = torch.Tensor([-999999])
             partial_margin_classification_loss = partial_margin_classification_loss.to(self.device)
@@ -120,19 +121,16 @@ class DQfDAgent(object):
                 partial_margin_classification_loss = max(partial_margin_classification_loss, expect + margin(action, selected_action))
             margin_classification_loss = partial_margin_classification_loss - self.target_network(state).detach().cpu().numpy()[action]
             # n-step returns 계산 #
-            current_n_step_action = action
-            current_n_step_state, current_n_step_reward, __done__ = next_state.detach().cpu().numpy(), reward, done
-            n_step_returns = torch.Tensor([current_n_step_reward])
+            n_step_returns = torch.Tensor([reward])
             n_step_returns = n_step_returns.to(self.device)
-            for exp in range(1, 10):
+            current_n_step_next_state = next_state.detach().cpu().numpy()
+            n = min(self.n - episode, 10)
+            for exp in range(1, n):
+                _, _, current_n_step_reward, current_n_step_next_state, __done__, _ = minibatch[episode + exp]
                 if __done__:
                     break
-                current_n_step_state = torch.from_numpy(current_n_step_state).float().to(self.device)
-                current_n_step_action = self.target_network(current_n_step_state).argmax()
-                current_n_step_state, current_n_step_reward, __done__, _ = self.env.step(current_n_step_action.detach().cpu().numpy())
                 n_step_returns = n_step_returns + (self.gamma ** exp) * current_n_step_reward
-            current_n_step_state = torch.from_numpy(current_n_step_state).float().to(self.device)
-            expect = self.target_network(current_n_step_state).max()
+            expect = self.target_network(torch.from_numpy(current_n_step_next_state)).max()
             partial_n_step_returns = (self.gamma ** 10) * expect
             n_step_returns = n_step_returns + partial_n_step_returns
             self.policy_network.train()
@@ -145,15 +143,26 @@ class DQfDAgent(object):
             torch.nn.utils.clip_grad_norm_(self.policy_network.parameters(), 1.0)
             self.policy_network.opt.step()
 
-    def sample_minibatch(self):
+    def sample_minibatch(self, n=1, continuous=False):
         # softmax 함수 사용 #
-        result = []
-        for _ in range(self.n):
+        if continuous:
+            sample_index = True
+        else:
+            sample_index = False
+        if continuous:
             if self.use_per:
-                choice = self.memory.sample_original()
+                index = self.memory.sample_original(sample_index, k=n)
             else:
-                choice = self.memory.sample()
-            result.append(choice)
+                index = self.memory.sample(sample_index, k=n)
+            return self.memory.container[index: index + n]
+        else:
+            result = []
+            for _ in range(n):
+                if self.use_per:
+                    choice = self.memory.sample_original(sample_index)
+                else:
+                    choice = self.memory.sample(sample_index)
+                result.append(choice)
         return result
 
     def pretrain(self):
@@ -210,7 +219,7 @@ class DQfDAgent(object):
                 ########### 3. DO NOT MODIFY FOR TESTING ###########
                 test_episode_reward += reward      
                 ########### 3. DO NOT MODIFY FOR TESTING  ###########
-                ## TODO
+                self.train_network(to_append)
                 ########### 4. DO NOT MODIFY FOR TESTING  ###########
                 if done:
                     test_mean_episode_reward.append(test_episode_reward)
@@ -257,9 +266,16 @@ class Memory():
         self.priority = torch.from_numpy(np.array(self.td_errors[:self.max+1], dtype=np.float))
         self.priority = F.softmax(self.priority)
         self.priority = self.priority.numpy()
-    def sample(self):
+    def sample(self, sample_index=False, k=1):
         choice = random.randint(0, self.max)
-        return self.container[choice]
-    def sample_original(self):
-        result = random.choices(self.container[:self.max+1], weights=self.priority)[0]
+        if sample_index:
+            result = random.randint(0, self.max-k+1)
+        else:
+            result = self.container[choice]
+        return result
+    def sample_original(self, sample_index=False, k=1):
+        if sample_index:
+            result = random.choices(list(range(0, len(self.priority)-k+1)), weights=self.priority)[0]
+        else:
+            result = random.choices(self.container[:self.max+1], weights=self.priority)[0]
         return result
