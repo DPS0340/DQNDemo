@@ -31,7 +31,7 @@ class DQfDNetwork(nn.Module):
         nn.init.kaiming_uniform_(self.f1.weight)
         nn.init.kaiming_uniform_(self.f2.weight)
         nn.init.kaiming_uniform_(self.f3.weight)
-        self.opt = torch.optim.Adam(self.parameters(), lr=0.002)
+        self.opt = torch.optim.Adam(self.parameters(), lr=0.005)
         self.loss = torch.nn.MSELoss()
 
     def forward(self,x):
@@ -82,7 +82,7 @@ class DQfDAgent(object):
 
     def train_network(self, args=None, pretrain=False):
         # 람다값 임의로 설정 #
-        l1 = l2 = l3 = 0.5
+        l1 = l2 = l3 = 0.35
 
         if pretrain:
             self.n = 50
@@ -93,7 +93,8 @@ class DQfDAgent(object):
 
         for episode in range(self.n):
             state, action, reward, next_state, done, gain = minibatch[episode]
-            if gain == 500:
+            # 누적 reward인 gain을 reward function으로 사용 #
+            if gain >= 500:
                 gain += 50
             elif done:
                 gain = -100
