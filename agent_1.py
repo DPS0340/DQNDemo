@@ -51,12 +51,11 @@ class DQfDAgent(object):
         self.n_EPISODES = n_episode
         self.env = env
         self.use_per = use_per
-        self.gamma = 0.99
-        self.epsilon = 0.1
+        self.gamma = 0.95
+        self.epsilon = 1.0
         self.epsilon_decay = 0.999
         self.epsilon_min = 0.001
-        # self.device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
-        self.device = torch.device('cpu')
+        self.device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
         self.state_size = env.observation_space.shape[0]
         self.action_size = env.action_space.n
         self.policy_network = DQfDNetwork(self.state_size, self.action_size).to(self.device)
@@ -129,7 +128,7 @@ class DQfDAgent(object):
                 if __done__:
                     break
                 n_step_returns = n_step_returns + (self.gamma ** exp) * current_n_step_reward
-            expect = self.target_network(torch.from_numpy(current_n_step_next_state)).max()
+            expect = self.target_network(torch.from_numpy(current_n_step_next_state).detach().cpu().numpy()).max()
             partial_n_step_returns = (self.gamma ** 10) * expect
             n_step_returns = n_step_returns + partial_n_step_returns
             self.policy_network.train()
