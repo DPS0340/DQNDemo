@@ -191,6 +191,7 @@ class DQfDAgent(object):
             ## TODO
             done = False
             state = env.reset()
+            env.render()
             state = torch.from_numpy(state).float().to(self.device)
             self.policy_network.eval()
             cnt = 0
