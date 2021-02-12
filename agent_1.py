@@ -34,7 +34,7 @@ class DQfDNetwork(nn.Module):
         nn.init.kaiming_uniform_(self.f2.weight)
         nn.init.kaiming_uniform_(self.f3.weight)
         nn.init.kaiming_uniform_(self.f4.weight)
-        self.opt = torch.optim.Adam(self.parameters(), lr=0.005)
+        self.opt = torch.optim.Adam(self.parameters(), lr=0.001)
         self.loss = torch.nn.MSELoss()
 
     def forward(self,x):
