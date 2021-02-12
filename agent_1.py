@@ -95,11 +95,9 @@ class DQfDAgent(object):
             state, action, reward, next_state, done, gain = minibatch[episode]
             # 누적 reward인 gain을 reward function으로 사용 #
             if done and gain >= 500:
-                reward = 100
+                gain += 100
             elif done:
-                reward = -1
-            else:
-                reward = 0
+                gain = -1
             state = torch.from_numpy(state).float().to(self.device)
             next_state = torch.from_numpy(next_state).float().to(self.device)
             next_state.requires_grad = True
@@ -107,7 +105,7 @@ class DQfDAgent(object):
             double_dqn_loss = self.target_network(next_state).max()
             double_dqn_loss = double_dqn_loss * self.gamma
             double_dqn_loss = double_dqn_loss - self.target_network(state).detach().cpu().numpy()[action]
-            double_dqn_loss = double_dqn_loss + reward
+            double_dqn_loss = double_dqn_loss + gain
             double_dqn_loss = torch.pow(double_dqn_loss, 2)
             def margin(action1, action2):
                 if action1 == action2:
