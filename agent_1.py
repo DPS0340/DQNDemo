@@ -88,7 +88,7 @@ class DQfDAgent(object):
 
     def train_network(self, args=None, pretrain=False, minibatch_size=MINIBATCH_SIZE):
         # 람다값 임의로 설정 #
-        l1 = l2 = l3 = 0.25
+        l1 = l2 = l3 = 0.2
 
         if pretrain:
             self.n = minibatch_size
@@ -120,19 +120,16 @@ class DQfDAgent(object):
                 partial_margin_classification_loss = max(partial_margin_classification_loss, expect + margin(action, selected_action))
             margin_classification_loss = partial_margin_classification_loss - self.target_network(state).detach().cpu().numpy()[action]
             # n-step returns 계산 #
-            current_n_step_action = action
-            current_n_step_state, current_n_step_reward, __done__, _ = self.env.step(current_n_step_action)
-            n_step_returns = torch.Tensor([current_n_step_reward])
+            n_step_returns = torch.Tensor([reward])
             n_step_returns = n_step_returns.to(self.device)
-            for exp in range(1, 10):
+            current_n_step_next_state = next_state.detach().cpu().numpy()
+            n = min(self.n - episode, 10)
+            for exp in range(1, n):
+                _, _, current_n_step_reward, current_n_step_next_state, __done__, _ = minibatch[episode + exp]
                 if __done__:
                     break
-                current_n_step_state = torch.from_numpy(current_n_step_state).float().to(self.device)
-                current_n_step_action = self.target_network(current_n_step_state).argmax()
-                current_n_step_state, current_n_step_reward, __done__, _ = self.env.step(current_n_step_action.detach().cpu().numpy())
                 n_step_returns = n_step_returns + (self.gamma ** exp) * current_n_step_reward
-            current_n_step_state = torch.from_numpy(current_n_step_state).float().to(self.device)
-            expect = self.target_network(current_n_step_state).max()
+            expect = self.target_network(torch.from_numpy(current_n_step_next_state).to(self.device)).max()
             partial_n_step_returns = (self.gamma ** 10) * expect
             n_step_returns = n_step_returns + partial_n_step_returns
             self.policy_network.train()
