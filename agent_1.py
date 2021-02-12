@@ -19,13 +19,13 @@ def get_demo_traj():
 ##########################################################################
 
 PRETRAIN_STEP = 1000
-MINIBATCH_SIZE = 50
+MINIBATCH_SIZE = 100
 RUNNING_MINIBATCH_SIZE = 25
 
 class DQfDNetwork(nn.Module):
     def __init__(self, in_size, out_size):
         super(DQfDNetwork, self).__init__()
-        HIDDEN_SIZE = 256
+        HIDDEN_SIZE = 512
         self.f1 = nn.Linear(in_size, HIDDEN_SIZE)
         self.f2 = nn.Linear(HIDDEN_SIZE, HIDDEN_SIZE)
         self.f3 = nn.Linear(HIDDEN_SIZE, HIDDEN_SIZE)
@@ -59,7 +59,7 @@ class DQfDAgent(object):
         self.gamma = 0.95
         self.epsilon = 0.1
         self.epsilon_decay = 0.995
-        self.epsilon_min = 0.001
+        self.epsilon_min = 0.0
         # self.device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
         self.device = torch.device('cpu')
         self.state_size = env.observation_space.shape[0]
@@ -99,6 +99,8 @@ class DQfDAgent(object):
 
         for episode in range(self.n):
             state, action, reward, next_state, done, gain = minibatch[episode]
+            if done:
+                reward = -10
             state = torch.from_numpy(state).float().to(self.device)
             next_state = torch.from_numpy(next_state).float().to(self.device)
             next_state.requires_grad = True
@@ -219,7 +221,7 @@ class DQfDAgent(object):
                 ########### 3. DO NOT MODIFY FOR TESTING  ###########
                 self.train_network(pretrain=True, minibatch_size=RUNNING_MINIBATCH_SIZE)
                 if done:
-                    print(f"reward is {test_episode_reward}")
+                    print(f"{e} episode: reward is {test_episode_reward}")
                 ########### 4. DO NOT MODIFY FOR TESTING  ###########
                 if done:
                     test_mean_episode_reward.append(test_episode_reward)
