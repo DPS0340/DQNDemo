@@ -19,13 +19,13 @@ def get_demo_traj():
 ##########################################################################
 
 PRETRAIN_STEP = 1000
-MINIBATCH_SIZE = 100
+MINIBATCH_SIZE = 25
 RUNNING_MINIBATCH_SIZE = 25
 
 class DQfDNetwork(nn.Module):
     def __init__(self, in_size, out_size):
         super(DQfDNetwork, self).__init__()
-        HIDDEN_SIZE = 512
+        HIDDEN_SIZE = 256
         self.f1 = nn.Linear(in_size, HIDDEN_SIZE)
         self.f2 = nn.Linear(HIDDEN_SIZE, HIDDEN_SIZE)
         self.f3 = nn.Linear(HIDDEN_SIZE, HIDDEN_SIZE)
@@ -34,7 +34,7 @@ class DQfDNetwork(nn.Module):
         nn.init.kaiming_uniform_(self.f2.weight)
         nn.init.kaiming_uniform_(self.f3.weight)
         nn.init.kaiming_uniform_(self.f4.weight)
-        self.opt = torch.optim.Adam(self.parameters(), lr=0.001)
+        self.opt = torch.optim.SGD(self.parameters(), lr=0.01, momentum=0.9, weight_decay=0.01)
         self.loss = torch.nn.MSELoss()
 
     def forward(self,x):
@@ -56,10 +56,10 @@ class DQfDAgent(object):
         self.n_EPISODES = n_episode
         self.env = env
         self.use_per = use_per
-        self.gamma = 0.95
+        self.gamma = 0.99
         self.epsilon = 0.1
         self.epsilon_decay = 0.995
-        self.epsilon_min = 0.0
+        self.epsilon_min = 0.1
         # self.device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
         self.device = torch.device('cpu')
         self.state_size = env.observation_space.shape[0]
@@ -88,7 +88,7 @@ class DQfDAgent(object):
 
     def train_network(self, args=None, pretrain=False, minibatch_size=MINIBATCH_SIZE):
         # 람다값 임의로 설정 #
-        l1 = l2 = l3 = 0.2
+        l1 = l2 = l3 = 0.25
 
         if pretrain:
             self.n = minibatch_size
@@ -98,9 +98,7 @@ class DQfDAgent(object):
             minibatch = [args]
 
         for episode in range(self.n):
-            state, action, reward, next_state, done, gain = minibatch[episode]
-            if done:
-                reward = -10
+            state, action, reward, next_state, done, cnt = minibatch[episode]
             state = torch.from_numpy(state).float().to(self.device)
             next_state = torch.from_numpy(next_state).float().to(self.device)
             next_state.requires_grad = True
@@ -243,7 +241,7 @@ class DQfDAgent(object):
 
 
 class Memory():
-    def __init__(self, length=5000):
+    def __init__(self, length=10000):
         self.idx = 0
         self.length = length
         self.container = [None for _ in range(length)]
