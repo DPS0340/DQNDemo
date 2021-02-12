@@ -82,7 +82,7 @@ class DQfDAgent(object):
 
     def train_network(self, args=None, pretrain=False):
         # 람다값 임의로 설정 #
-        l1 = l2 = l3 = 0.35
+        l1 = l2 = l3 = 0.1
 
         if pretrain:
             self.n = 50
@@ -94,8 +94,8 @@ class DQfDAgent(object):
         for episode in range(self.n):
             state, action, reward, next_state, done, gain = minibatch[episode]
             # 누적 reward인 gain을 reward function으로 사용 #
-            if done and gain >= 500:
-                gain += 100
+            if gain == 500:
+                gain += 50
             elif done:
                 gain = -1
             state = torch.from_numpy(state).float().to(self.device)
