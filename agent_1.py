@@ -57,7 +57,7 @@ class DQfDAgent(object):
         self.env = env
         self.use_per = use_per
         self.gamma = 0.95
-        self.epsilon = 1.0
+        self.epsilon = 0.1
         self.epsilon_decay = 0.995
         self.epsilon_min = 0.001
         # self.device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
