@@ -203,8 +203,7 @@ class DQfDAgent(object):
 
                 next_state, reward, done, _ = env.step(action)
                 next_state = torch.from_numpy(next_state).float().to(self.device)
-                if not done:
-                    cnt += 1
+                cnt += 1
                 to_append = [state.cpu().numpy(), action, reward, next_state.cpu().numpy(), done, cnt]
                 self.memory.push(to_append, self)
                 ########### 3. DO NOT MODIFY FOR TESTING ###########
