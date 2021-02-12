@@ -82,7 +82,7 @@ class DQfDAgent(object):
 
     def train_network(self, args=None, pretrain=False):
         # 람다값 임의로 설정 #
-        l1 = l2 = l3 = 0.1
+        l1 = l2 = l3 = 0.5
 
         if pretrain:
             self.n = 100
