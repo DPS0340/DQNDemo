@@ -85,7 +85,7 @@ class DQfDAgent(object):
         l1 = l2 = l3 = 0.1
 
         if pretrain:
-            self.n = 50
+            self.n = 100
             minibatch = self.sample_minibatch()
         else:
             self.n = 1
@@ -104,7 +104,7 @@ class DQfDAgent(object):
             # double_dqn_loss 계산 # 
             double_dqn_loss = self.target_network(next_state).max()
             double_dqn_loss = double_dqn_loss * self.gamma
-            double_dqn_loss = double_dqn_loss - self.target_network(state).detach().cpu().numpy()[action]
+            double_dqn_loss = double_dqn_loss - self.policy_network(state).detach().cpu().numpy()[action]
             double_dqn_loss = double_dqn_loss + gain
             double_dqn_loss = torch.pow(double_dqn_loss, 2)
             def margin(action1, action2):
@@ -112,12 +112,10 @@ class DQfDAgent(object):
                     return torch.Tensor([0]).to(self.device)
                 return torch.Tensor([0.1]).to(self.device)
             # margin_classification_loss 계산 #
-            partial_margin_classification_loss = torch.Tensor([0])
+            partial_margin_classification_loss = torch.Tensor([-999999])
             partial_margin_classification_loss = partial_margin_classification_loss.to(self.device)
             for selected_action in range(2):
-                __state__, _, _, _ = self.env.step(selected_action)
-                __state__ = torch.from_numpy(__state__).float().to(self.device)
-                expect = self.target_network(__state__).detach().cpu().numpy()[selected_action]
+                expect = self.target_network(state).detach().cpu().numpy()[selected_action]
                 partial_margin_classification_loss = max(partial_margin_classification_loss, expect + margin(action, selected_action))
             margin_classification_loss = partial_margin_classification_loss - self.target_network(state).detach().cpu().numpy()[action]
             # n-step returns 계산 #
