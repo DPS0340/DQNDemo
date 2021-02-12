@@ -31,7 +31,7 @@ class DQfDNetwork(nn.Module):
         nn.init.kaiming_uniform_(self.f1.weight)
         nn.init.kaiming_uniform_(self.f2.weight)
         nn.init.kaiming_uniform_(self.f3.weight)
-        self.opt = torch.optim.Adam(self.parameters(), lr=0.001)
+        self.opt = torch.optim.Adam(self.parameters(), lr=0.005)
         self.loss = torch.nn.MSELoss()
 
     def forward(self,x):
@@ -57,7 +57,6 @@ class DQfDAgent(object):
         self.epsilon_decay = 0.999
         self.epsilon_min = 0.001
         self.device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
-        env.render()
         state_size = env.observation_space.shape[0]
         action_size = env.action_space.n
         self.policy_network = DQfDNetwork(state_size, action_size).to(self.device)
@@ -83,7 +82,7 @@ class DQfDAgent(object):
 
     def train_network(self, args=None, pretrain=False):
         # 람다값 임의로 설정 #
-        l1 = l2 = l3 = 0.5
+        l1 = l2 = l3 = 0.35
 
         if pretrain:
             self.n = 50
@@ -93,19 +92,19 @@ class DQfDAgent(object):
             minibatch = [args]
 
         for episode in range(self.n):
-            state, action, reward, next_state, done, cnt = minibatch[episode]
-            if cnt == 500:
-                reward += 50
+            state, action, reward, next_state, done, gain = minibatch[episode]
+            if gain == 500:
+                gain += 50
             elif done:
-                reward = -5
+                gain = -10
             state = torch.from_numpy(state).float().to(self.device)
             next_state = torch.from_numpy(next_state).float().to(self.device)
             next_state.requires_grad = True
             # double_dqn_loss 계산 # 
-            double_dqn_loss = self.target_network(next_state).to(self.device).max()
+            double_dqn_loss = self.target_network(next_state).max()
             double_dqn_loss = double_dqn_loss * self.gamma
-            double_dqn_loss = double_dqn_loss - self.target_network(state).to(self.device).detach().cpu().numpy()[action]
-            double_dqn_loss = double_dqn_loss + reward
+            double_dqn_loss = double_dqn_loss - self.target_network(state).detach().cpu().numpy()[action]
+            double_dqn_loss = double_dqn_loss + gain
             double_dqn_loss = torch.pow(double_dqn_loss, 2)
             def margin(action1, action2):
                 if action1 == action2:
@@ -117,7 +116,7 @@ class DQfDAgent(object):
             for selected_action in range(2):
                 __state__, _, _, _ = self.env.step(selected_action)
                 __state__ = torch.from_numpy(__state__).float().to(self.device)
-                expect = self.target_network(__state__).to(self.device).detach().cpu().numpy()[selected_action]
+                expect = self.target_network(__state__).detach().cpu().numpy()[selected_action]
                 partial_margin_classification_loss = max(partial_margin_classification_loss, expect + margin(action, selected_action))
             margin_classification_loss = partial_margin_classification_loss - self.target_network(state).detach().cpu().numpy()[action]
             # n-step returns 계산 #
@@ -125,19 +124,16 @@ class DQfDAgent(object):
             n_step_returns = n_step_returns.to(self.device)
             current_n_step_action = action
             current_n_step_state, current_reward, __done__, _ = self.env.step(current_n_step_action)
-            for exp in range(1, self.n):
+            for exp in range(1, 10):
                 if __done__:
                     break
                 current_n_step_state = torch.from_numpy(current_n_step_state).float().to(self.device)
-                current_n_step_action = self.target_network(current_n_step_state).to(self.device).max()
-                current_n_step_state, current_reward, __done__, _ = self.env.step(action)
-                n_step_returns = n_step_returns + (self.gamma ** exp) * current_reward
-            partial_n_step_returns = torch.Tensor([0]).to(self.device)
-            for selected_action in range(2):
-                __state__, _, _, _ = self.env.step(selected_action)
-                __state__ = torch.from_numpy(__state__).float().to(self.device)
-                expect = self.target_network(__state__).to(self.device).max()
-                partial_n_step_returns = max(partial_n_step_returns, expect + margin(action, selected_action))
+                current_n_step_action = self.target_network(current_n_step_state).argmax()
+                current_n_step_state, current_n_step_reward, __done__, _ = self.env.step(current_n_step_action.detach().cpu().numpy())
+                n_step_returns = n_step_returns + (self.gamma ** exp) * current_n_step_action
+            current_n_step_state = torch.from_numpy(current_n_step_state).float().to(self.device)
+            expect = self.target_network(current_n_step_state).max()
+            partial_n_step_returns = (self.gamma ** 10) * expect
             n_step_returns = n_step_returns + partial_n_step_returns
             self.policy_network.train()
             # 오차역전파로 기울기 함수 학습 #
@@ -177,7 +173,6 @@ class DQfDAgent(object):
         ###### 1. DO NOT MODIFY FOR TESTING ######
         env = self.env
         env.reset()
-        env.render()
         dqfd_agent = self
         self.d_replay = get_demo_traj()
         for e in self.d_replay:
@@ -199,11 +194,10 @@ class DQfDAgent(object):
             state = env.reset()
             state = torch.from_numpy(state).float().to(self.device)
             self.policy_network.eval()
-            env.render()
             cnt = 0
             while not done:
-                env.render()
                 ## TODO
+                env.render()
                 action = dqfd_agent.get_action(state)
                 ## TODO
 
@@ -225,14 +219,14 @@ class DQfDAgent(object):
                 ########### 4. DO NOT MODIFY FOR TESTING  ###########
                 state = next_state
                 ## TODO
+            self.train_network(pretrain=True)
+            if e % self.frequency == 0:
+                self.target_network.load_state_dict(self.policy_network.state_dict())
             ########### 5. DO NOT MODIFY FOR TESTING  ###########
             if test_over_reward:
                 print("END train function")
                 break
             ########### 5. DO NOT MODIFY FOR TESTING  ###########
-            self.train_network(pretrain=True)
-            if e % self.frequency == 0:
-                self.target_network.load_state_dict(self.policy_network.state_dict())
         ########### 6. DO NOT MODIFY FOR TESTING  ###########
         return test_min_episode, np.mean(test_mean_episode_reward)
         ########### 6. DO NOT MODIFY FOR TESTING  ###########
