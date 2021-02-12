@@ -25,21 +25,20 @@ MINIBATCH_SIZE = 100
 class DQfDNetwork(nn.Module):
     def __init__(self, in_size, out_size):
         super(DQfDNetwork, self).__init__()
-        HIDDEN_SIZE = 128
+        HIDDEN_SIZE = 256
         self.f1 = nn.Linear(in_size, HIDDEN_SIZE)
         self.f2 = nn.Linear(HIDDEN_SIZE, HIDDEN_SIZE)
         self.f3 = nn.Linear(HIDDEN_SIZE, out_size)
         nn.init.kaiming_uniform_(self.f1.weight)
         nn.init.kaiming_uniform_(self.f2.weight)
         nn.init.kaiming_uniform_(self.f3.weight)
-        self.opt = torch.optim.Adam(self.parameters(), lr=0.005)
+        self.opt = torch.optim.Adam(self.parameters(), lr=0.002)
         self.loss = torch.nn.MSELoss()
 
     def forward(self,x):
         x1 = F.relu6(self.f1(x))
         x2 = F.relu6(self.f2(x1))
-        x3 = self.f3(x2)
-        res = F.softmax(x3)
+        res = F.relu6(self.f3(x2))
         return res
     
 ##########################################################################
@@ -63,7 +62,7 @@ class DQfDAgent(object):
         self.action_size = env.action_space.n
         self.policy_network = DQfDNetwork(self.state_size, self.action_size).to(self.device)
         self.target_network = DQfDNetwork(self.state_size, self.action_size).to(self.device)
-        self.frequency = 5
+        self.frequency = 1
         self.memory = Memory()
         print('device is', self.device)
     
@@ -95,6 +94,7 @@ class DQfDAgent(object):
 
         for episode in range(self.n):
             state, action, reward, next_state, done, gain = minibatch[episode]
+            self.target_network.eval()
             # 누적 reward인 gain을 reward function으로 사용 #
             if gain == 500:
                 gain += 50
@@ -219,7 +219,9 @@ class DQfDAgent(object):
                 ########### 3. DO NOT MODIFY FOR TESTING ###########
                 test_episode_reward += reward      
                 ########### 3. DO NOT MODIFY FOR TESTING  ###########
-                self.train_network(to_append)
+                self.train_network(pretrain=True)
+                if e % self.frequency == 0:
+                    self.target_network.load_state_dict(self.policy_network.state_dict())
                 ########### 4. DO NOT MODIFY FOR TESTING  ###########
                 if done:
                     test_mean_episode_reward.append(test_episode_reward)
@@ -229,9 +231,6 @@ class DQfDAgent(object):
                 ########### 4. DO NOT MODIFY FOR TESTING  ###########
                 state = next_state
                 ## TODO
-            self.train_network(pretrain=True)
-            if e % self.frequency == 0:
-                self.target_network.load_state_dict(self.policy_network.state_dict())
             ########### 5. DO NOT MODIFY FOR TESTING  ###########
             if test_over_reward:
                 print("END train function")
