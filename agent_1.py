@@ -19,7 +19,7 @@ def get_demo_traj():
 ##########################################################################
 
 PRETRAIN_STEP = 1000
-MINIBATCH_SIZE = 100
+MINIBATCH_SIZE = 50
 RUNNING_MINIBATCH_SIZE = 25
 
 class DQfDNetwork(nn.Module):
@@ -28,17 +28,21 @@ class DQfDNetwork(nn.Module):
         HIDDEN_SIZE = 256
         self.f1 = nn.Linear(in_size, HIDDEN_SIZE)
         self.f2 = nn.Linear(HIDDEN_SIZE, HIDDEN_SIZE)
-        self.f3 = nn.Linear(HIDDEN_SIZE, out_size)
+        self.f3 = nn.Linear(HIDDEN_SIZE, HIDDEN_SIZE)
+        self.f4 = nn.Linear(HIDDEN_SIZE, out_size)
         nn.init.kaiming_uniform_(self.f1.weight)
         nn.init.kaiming_uniform_(self.f2.weight)
         nn.init.kaiming_uniform_(self.f3.weight)
+        nn.init.kaiming_uniform_(self.f4.weight)
         self.opt = torch.optim.Adam(self.parameters(), lr=0.005)
         self.loss = torch.nn.MSELoss()
 
     def forward(self,x):
-        x1 = F.relu6(self.f1(x))
-        x2 = F.relu6(self.f2(x1))
-        res = F.softmax(self.f3(x2))
+        x1 = F.dropout(F.relu6(self.f1(x)))
+        x2 = F.dropout(F.relu6(self.f2(x1)))
+        x3 = F.dropout(F.relu6(self.f3(x2)))
+        x4 = self.f4(x3)
+        res = F.softmax(x4)
         return res
     
 ##########################################################################
@@ -74,12 +78,13 @@ class DQfDAgent(object):
         if randint <= self.epsilon:
             return random.randint(0, self.action_size-1)
         else:
-            self.policy_network.eval()
-            predicted = self.policy_network(state).to(self.device)
-            action = torch.argmax(predicted)
-            action = action.cpu().numpy()
-            return action
-    
+            with torch.no_grad():
+                self.policy_network.eval()
+                predicted = self.policy_network(state).to(self.device)
+                action = torch.argmax(predicted)
+                action = action.cpu().numpy()
+                return action
+        
 
     def train_network(self, args=None, pretrain=False, minibatch_size=MINIBATCH_SIZE):
         # 람다값 임의로 설정 #
@@ -94,7 +99,6 @@ class DQfDAgent(object):
 
         for episode in range(self.n):
             state, action, reward, next_state, done, gain = minibatch[episode]
-            self.target_network.eval()
             state = torch.from_numpy(state).float().to(self.device)
             next_state = torch.from_numpy(next_state).float().to(self.device)
             next_state.requires_grad = True
@@ -205,7 +209,6 @@ class DQfDAgent(object):
                 env.render()
                 action = dqfd_agent.get_action(state)
                 ## TODO
-
                 next_state, reward, done, _ = env.step(action)
                 next_state = torch.from_numpy(next_state).float().to(self.device)
                 cnt += 1
