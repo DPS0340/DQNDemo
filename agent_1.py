@@ -31,7 +31,7 @@ class DQfDNetwork(nn.Module):
         nn.init.kaiming_uniform_(self.f1.weight)
         nn.init.kaiming_uniform_(self.f2.weight)
         nn.init.kaiming_uniform_(self.f3.weight)
-        self.opt = torch.optim.Adam(self.parameters(), lr=0.005)
+        self.opt = torch.optim.Adam(self.parameters(), lr=0.002)
         self.loss = torch.nn.MSELoss()
 
     def forward(self,x):
@@ -94,10 +94,12 @@ class DQfDAgent(object):
         for episode in range(self.n):
             state, action, reward, next_state, done, gain = minibatch[episode]
             # 누적 reward인 gain을 reward function으로 사용 #
-            if gain >= 500:
-                gain += 50
+            if done and gain >= 500:
+                reward = 100
             elif done:
-                gain = -100
+                reward = -1
+            else:
+                reward = 0
             state = torch.from_numpy(state).float().to(self.device)
             next_state = torch.from_numpy(next_state).float().to(self.device)
             next_state.requires_grad = True
@@ -105,12 +107,12 @@ class DQfDAgent(object):
             double_dqn_loss = self.target_network(next_state).max()
             double_dqn_loss = double_dqn_loss * self.gamma
             double_dqn_loss = double_dqn_loss - self.target_network(state).detach().cpu().numpy()[action]
-            double_dqn_loss = double_dqn_loss + gain
+            double_dqn_loss = double_dqn_loss + reward
             double_dqn_loss = torch.pow(double_dqn_loss, 2)
             def margin(action1, action2):
                 if action1 == action2:
                     return torch.Tensor([0]).to(self.device)
-                return torch.Tensor([1]).to(self.device)
+                return torch.Tensor([0.1]).to(self.device)
             # margin_classification_loss 계산 #
             partial_margin_classification_loss = torch.Tensor([0])
             partial_margin_classification_loss = partial_margin_classification_loss.to(self.device)
@@ -121,17 +123,17 @@ class DQfDAgent(object):
                 partial_margin_classification_loss = max(partial_margin_classification_loss, expect + margin(action, selected_action))
             margin_classification_loss = partial_margin_classification_loss - self.target_network(state).detach().cpu().numpy()[action]
             # n-step returns 계산 #
-            n_step_returns = torch.Tensor([reward])
-            n_step_returns = n_step_returns.to(self.device)
             current_n_step_action = action
-            current_n_step_state, current_reward, __done__, _ = self.env.step(current_n_step_action)
+            current_n_step_state, current_n_step_reward, __done__, _ = self.env.step(current_n_step_action)
+            n_step_returns = torch.Tensor([current_n_step_reward])
+            n_step_returns = n_step_returns.to(self.device)
             for exp in range(1, 10):
                 if __done__:
                     break
                 current_n_step_state = torch.from_numpy(current_n_step_state).float().to(self.device)
                 current_n_step_action = self.target_network(current_n_step_state).argmax()
                 current_n_step_state, current_n_step_reward, __done__, _ = self.env.step(current_n_step_action.detach().cpu().numpy())
-                n_step_returns = n_step_returns + (self.gamma ** exp) * current_n_step_action
+                n_step_returns = n_step_returns + (self.gamma ** exp) * current_n_step_reward
             current_n_step_state = torch.from_numpy(current_n_step_state).float().to(self.device)
             expect = self.target_network(current_n_step_state).max()
             partial_n_step_returns = (self.gamma ** 10) * expect
