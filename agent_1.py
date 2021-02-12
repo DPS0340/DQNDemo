@@ -19,7 +19,7 @@ def get_demo_traj():
 ##########################################################################
 
 PRETRAIN_STEP = 1000
-MINIBATCH_SIZE = 100
+MINIBATCH_SIZE = 50
 RUNNING_MINIBATCH_SIZE = 20
 
 class DQfDNetwork(nn.Module):
@@ -32,12 +32,12 @@ class DQfDNetwork(nn.Module):
         nn.init.kaiming_uniform_(self.f1.weight)
         nn.init.kaiming_uniform_(self.f2.weight)
         nn.init.kaiming_uniform_(self.f3.weight)
-        self.opt = torch.optim.SGD(self.parameters(), lr=0.01, momentum=0.9)
+        self.opt = torch.optim.Adam(self.parameters())
         self.loss = torch.nn.MSELoss()
 
     def forward(self,x):
-        x1 = F.relu6(self.f1(x))
-        x2 = F.dropout(self.f2(x1))
+        x1 = F.relu(self.f1(x))
+        x2 = F.relu(self.f2(x1))
         x3 = self.f3(x2)
         res = F.softmax(x3)
         return res
@@ -85,7 +85,7 @@ class DQfDAgent(object):
 
     def train_network(self, args=None, pretrain=False, minibatch_size=MINIBATCH_SIZE):
         # 람다값 임의로 설정 #
-        l1 = l2 = l3 = 0.1
+        l1 = l2 = l3 = 0.2
 
         if pretrain:
             self.n = minibatch_size
@@ -100,15 +100,22 @@ class DQfDAgent(object):
             next_state = torch.from_numpy(next_state).float().to(self.device)
             next_state.requires_grad = True
             # double_dqn_loss 계산 #
-            Q = torch.Tensor([reward]).to(self.device)
-            Q_prime = torch.Tensor([reward]).to(self.device)
+            Q = torch.Tensor([0]).to(self.device)
+            Q_prime = torch.Tensor([0]).to(self.device)
+            Q_max = torch.Tensor([0]).to(self.device)
+            Q_prime_max = torch.Tensor([0]).to(self.device)
             Q.requires_grad = True
             Q_prime.requires_grad = True
+            Q_max.requires_grad = True
+            Q_prime_max.requires_grad = True
             self.target_network.eval()
+            self.policy_network.eval()
             if not done:
-                Q = self.target_network(state).max()
-                Q_prime = self.target_network(next_state).max()
-            double_dqn_loss = reward + self.gamma * Q_prime - Q
+                Q = self.policy_network(state)
+                Q_prime = self.target_network(next_state)
+                Q_max = Q.max()
+                Q_prime_max = Q_prime.max()
+            double_dqn_loss = gain + self.gamma * Q_prime_max - Q_max
             double_dqn_loss = torch.pow(double_dqn_loss, 2)
             def margin(action1, action2):
                 if action1 == action2:
@@ -119,7 +126,7 @@ class DQfDAgent(object):
             for selected_action in range(self.action_size):
                 expect = self.target_network(state)[selected_action]
                 partial_margin_classification_loss = max(partial_margin_classification_loss, expect + margin(action, selected_action))
-            margin_classification_loss = partial_margin_classification_loss - Q
+            margin_classification_loss = partial_margin_classification_loss - Q_max
             # n-step returns 계산 #
             n_step_returns = torch.Tensor([reward]).to(self.device)
             current_n_step_next_state = next_state.detach().cpu().numpy()
@@ -137,8 +144,9 @@ class DQfDAgent(object):
             self.policy_network.opt.zero_grad()
             # loss 계산 #
             # L2 정규화는 MSE로 대체 #
-            L2_loss = self.policy_network.loss(torch.Tensor([reward]), Q)
+            L2_loss = self.policy_network.loss(Q.argmax(), torch.tensor([action]).to(self.device).float())
             loss = double_dqn_loss + l1 * margin_classification_loss + l2 * n_step_returns + l3 * L2_loss
+            # loss = double_dqn_loss + l1 * margin_classification_loss + l2 * n_step_returns
             loss.backward()
             torch.nn.utils.clip_grad_norm_(self.policy_network.parameters(), 1.0)
             self.policy_network.opt.step()
