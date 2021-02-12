@@ -31,7 +31,7 @@ class DQfDNetwork(nn.Module):
         nn.init.kaiming_uniform_(self.f1.weight)
         nn.init.kaiming_uniform_(self.f2.weight)
         nn.init.kaiming_uniform_(self.f3.weight)
-        self.opt = torch.optim.Adam(self.parameters(), lr=0.005)
+        self.opt = torch.optim.Adam(self.parameters(), lr=0.002)
         self.loss = torch.nn.MSELoss()
 
     def forward(self,x):
@@ -242,7 +242,7 @@ class Memory():
         self.max = 0
         self.epsilon = 0.001
     def push(self, obj, agent: DQfDAgent):
-        if self.idx == 500:
+        if self.idx == self.length:
             self.idx = 0
         self.container[self.idx] = obj
         state, action, reward, next_state, done, cnt = obj
