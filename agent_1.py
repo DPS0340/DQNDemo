@@ -16,7 +16,7 @@ def get_demo_traj():
 ##########################################################################
 
 PRETRAIN_STEP = 1000
-MINIBATCH_SIZE = 20
+MINIBATCH_SIZE = 30
 RUNNING_MINIBATCH_SIZE = 20
 
 class DQfDNetwork(nn.Module):
@@ -63,6 +63,7 @@ class DQfDAgent(object):
         self.action_size = env.action_space.n
         self.policy_network = DQfDNetwork(self.state_size, self.action_size).to(self.device)
         self.target_network = DQfDNetwork(self.state_size, self.action_size).to(self.device)
+        # target network 업데이트 주기 #
         self.frequency = 1
         self.memory = Memory()
         print('device is', self.device)
@@ -239,6 +240,7 @@ class DQfDAgent(object):
         ########### 6. DO NOT MODIFY FOR TESTING  ###########
 
 
+# 메모리 클래스 #
 class Memory():
     def __init__(self, length=10000):
         self.idx = 0
