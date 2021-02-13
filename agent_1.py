@@ -5,9 +5,13 @@ import torch.nn as nn
 import torch.nn.functional as F
 import random
 from collections import deque
+import matplotlib.pyplot as plt
 
 def get_demo_traj():
     return np.load("./demo_traj_2.npy", allow_pickle=True)
+
+plot_not_use_per = []
+plot_use_per = []
 
 ##########################################################################
 ############                                                  ############
@@ -27,6 +31,7 @@ class DQfDNetwork(nn.Module):
         self.f1 = nn.Linear(in_size, HIDDEN_SIZE)
         self.f2 = nn.Linear(HIDDEN_SIZE, HIDDEN_SIZE)
         self.f3 = nn.Linear(HIDDEN_SIZE, out_size)
+        # 가중치 he 초기화 #
         nn.init.kaiming_uniform_(self.f1.weight)
         nn.init.kaiming_uniform_(self.f2.weight)
         nn.init.kaiming_uniform_(self.f3.weight)
@@ -196,6 +201,8 @@ class DQfDAgent(object):
         self.pretrain()
         ## TODO
 
+        res = []
+
         for e in range(self.n_EPISODES):
             ########### 2. DO NOT MODIFY FOR TESTING ###########
             test_episode_reward = 0
@@ -218,8 +225,6 @@ class DQfDAgent(object):
                 test_episode_reward += reward      
                 ########### 3. DO NOT MODIFY FOR TESTING  ###########
                 self.train_network(pretrain=True, minibatch_size=RUNNING_MINIBATCH_SIZE)
-                if done:
-                    print(f"{e} episode: reward is {test_episode_reward}, average is {np.mean(test_mean_episode_reward)}")
                 ########### 4. DO NOT MODIFY FOR TESTING  ###########
                 if done:
                     test_mean_episode_reward.append(test_episode_reward)
@@ -227,6 +232,14 @@ class DQfDAgent(object):
                         test_over_reward = True
                         test_min_episode = e
                 ########### 4. DO NOT MODIFY FOR TESTING  ###########
+                if done:
+                    print(f"{e} episode: reward is {test_episode_reward}, average is {np.mean(test_mean_episode_reward)}")
+                    res.append(np.mean(test_mean_episode_reward))
+                    if (np.mean(test_mean_episode_reward) > 475) and (len(test_mean_episode_reward)==20):
+                        if self.use_per:
+                            plot_use_per.append(res)
+                        else:
+                            plot_not_use_per.append(res)
                 state = next_state
                 if e % self.frequency == 0:
                     self.target_network.load_state_dict(self.policy_network.state_dict())
@@ -278,3 +291,46 @@ class Memory():
         else:
             result = random.choices(self.container[:self.max+1], weights=self.priority)[0]
         return result
+
+
+def plot(use_per=False):
+    filename = f"plot_use_per_{use_per}"
+    arr = plot_use_per if use_per else plot_not_use_per
+    for e in arr:
+        plt.plot(list(range(len(e))), e)
+    plt.clf()
+    plt.savefig(filename)
+
+
+def eval_(use_per):
+    num_of_episode_list = []
+    n_episode = 250
+
+    for _ in range(5):
+        # 환경 선언 
+        env = gym.make('CartPole-v1')
+        
+        # 한번의 학습에서 최대 250 episode 진행
+
+        # DQfDagent 선언
+        dqfd_agent = DQfDAgent(env, use_per, n_episode)
+        
+        # DQfD agent train
+        num_of_episode, mean_reward = dqfd_agent.train()
+
+        print("Minimum number of episodes for 475 : {}, Average of 20 episodes reward : {}".format(num_of_episode, mean_reward))
+        num_of_episode_list.append(num_of_episode)
+        env.close()
+
+    return np.mean(num_of_episode_list)
+
+def main():
+    plot(use_per=False)
+    plot(use_per=True)
+    eval_(use_per=False)
+    eval_(use_per=True)
+    plot(use_per=False)
+    plot(use_per=True)
+
+if __name__ == '__main__':
+    main()
