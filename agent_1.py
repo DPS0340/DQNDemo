@@ -20,7 +20,7 @@ plot_use_per = []
 ##########################################################################
 
 PRETRAIN_STEP = 1000
-MINIBATCH_SIZE = 30
+MINIBATCH_SIZE = 20
 RUNNING_MINIBATCH_SIZE = 20
 
 class DQfDNetwork(nn.Module):
