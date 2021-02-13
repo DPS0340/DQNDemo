@@ -1,13 +1,10 @@
 import gym
 import numpy as np
-from numpy.core.fromnumeric import shape
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import math
 import random
 from collections import deque
-import sys
 
 def get_demo_traj():
     return np.load("./demo_traj_2.npy", allow_pickle=True)
@@ -19,26 +16,28 @@ def get_demo_traj():
 ##########################################################################
 
 PRETRAIN_STEP = 1000
-MINIBATCH_SIZE = 30
+MINIBATCH_SIZE = 20
 RUNNING_MINIBATCH_SIZE = 20
 
 class DQfDNetwork(nn.Module):
     def __init__(self, in_size, out_size):
         super(DQfDNetwork, self).__init__()
-        HIDDEN_SIZE = 256
+        HIDDEN_SIZE = 24
+        # 신경망 초기화 #
         self.f1 = nn.Linear(in_size, HIDDEN_SIZE)
         self.f2 = nn.Linear(HIDDEN_SIZE, HIDDEN_SIZE)
         self.f3 = nn.Linear(HIDDEN_SIZE, out_size)
         nn.init.kaiming_uniform_(self.f1.weight)
         nn.init.kaiming_uniform_(self.f2.weight)
         nn.init.kaiming_uniform_(self.f3.weight)
+        # 기본값 lr 사용 #
         self.opt = torch.optim.Adam(self.parameters())
         self.loss = torch.nn.MSELoss()
 
     def forward(self,x):
-        x1 = F.dropout(F.relu(self.f1(x)))
-        x2 = F.dropout(F.relu(self.f2(x1)))
-        x3 = F.dropout(self.f3(x2))
+        x1 = F.relu(self.f1(x))
+        x2 = F.relu(self.f2(x1))
+        x3 = self.f3(x2)
         res = F.softmax(x3)
         return res
     
@@ -53,11 +52,12 @@ class DQfDAgent(object):
         self.n_EPISODES = n_episode
         self.env = env
         self.use_per = use_per
-        self.gamma = 0.99
+        self.gamma = 0.95
         self.epsilon = 1.0
-        self.epsilon_decay = 0.999
+        self.epsilon_decay = 0.995
         self.epsilon_min = 0.01
         # self.device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+        # cpu가 더 빠르니까 cpu 사용 #
         self.device = torch.device('cpu')
         self.state_size = env.observation_space.shape[0]
         self.action_size = env.action_space.n
@@ -87,6 +87,7 @@ class DQfDAgent(object):
         # 람다값 임의로 설정 #
         l1 = l2 = l3 = 0.23
 
+        # pretrain False로는 쓰지 않음 #
         if pretrain:
             self.n = minibatch_size
             minibatch = self.sample_minibatch(self.n, continuous=False)
@@ -199,18 +200,14 @@ class DQfDAgent(object):
             test_episode_reward = 0
             ########### 2. DO NOT MODIFY FOR TESTING  ###########
 
-            ## TODO
             done = False
             state = env.reset()
             env.render()
             state = torch.from_numpy(state).float().to(self.device)
-            self.policy_network.eval()
             cnt = 0
             while not done:
-                ## TODO
                 env.render()
                 action = dqfd_agent.get_action(state)
-                ## TODO
                 next_state, reward, done, _ = env.step(action)
                 next_state = torch.from_numpy(next_state).float().to(self.device)
                 cnt += 1
@@ -221,7 +218,7 @@ class DQfDAgent(object):
                 ########### 3. DO NOT MODIFY FOR TESTING  ###########
                 self.train_network(pretrain=True, minibatch_size=RUNNING_MINIBATCH_SIZE)
                 if done:
-                    print(f"{e} episode: reward is {test_episode_reward}")
+                    print(f"{e} episode: reward is {test_episode_reward}, average is {np.mean(test_mean_episode_reward)}")
                 ########### 4. DO NOT MODIFY FOR TESTING  ###########
                 if done:
                     test_mean_episode_reward.append(test_episode_reward)
