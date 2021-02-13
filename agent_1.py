@@ -294,7 +294,7 @@ class Memory():
 
 
 def plot(use_per=False):
-    filename = f"plot_use_per_{use_per}"
+    filename = f"./plot_use_per_{use_per}"
     arr = plot_use_per if use_per else plot_not_use_per
     for e in arr:
         plt.plot(list(range(len(e))), e)
@@ -325,8 +325,6 @@ def eval_(use_per):
     return np.mean(num_of_episode_list)
 
 def main():
-    plot(use_per=False)
-    plot(use_per=True)
     eval_(use_per=False)
     eval_(use_per=True)
     plot(use_per=False)
