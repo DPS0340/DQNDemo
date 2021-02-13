@@ -26,15 +26,15 @@ RUNNING_MINIBATCH_SIZE = 20
 class DQfDNetwork(nn.Module):
     def __init__(self, in_size, out_size):
         super(DQfDNetwork, self).__init__()
-        HIDDEN_SIZE = 24
+        HIDDEN_SIZE = 30
         # 신경망 초기화 #
         self.f1 = nn.Linear(in_size, HIDDEN_SIZE)
         self.f2 = nn.Linear(HIDDEN_SIZE, HIDDEN_SIZE)
         self.f3 = nn.Linear(HIDDEN_SIZE, out_size)
-        # 가중치 he 초기화 #
-        nn.init.kaiming_uniform_(self.f1.weight)
-        nn.init.kaiming_uniform_(self.f2.weight)
-        nn.init.kaiming_uniform_(self.f3.weight)
+        # 가중치 xavier 초기화 #
+        nn.init.xavier_uniform_(self.f1.weight)
+        nn.init.xavier_uniform_(self.f2.weight)
+        nn.init.xavier_uniform_(self.f3.weight)
         # 기본값 lr 사용 #
         self.opt = torch.optim.Adam(self.parameters())
         self.loss = torch.nn.MSELoss()
@@ -175,7 +175,8 @@ class DQfDAgent(object):
 
     def pretrain(self):
         for i in range(PRETRAIN_STEP):
-            print(f"{i} pretrain step")
+            if i % 100 == 0:
+                print(f"{i} pretrain step")
             self.train_network(pretrain=True)
             if i % self.frequency == 0:
                 self.target_network.load_state_dict(self.policy_network.state_dict())
@@ -197,6 +198,8 @@ class DQfDAgent(object):
             for obj in e:
                 cnt += 1
                 self.memory.push([*obj, cnt], self)
+        # if self.use_per:
+        #     self.memory.plot_priority()
         # Do pretrain
         self.pretrain()
         ## TODO
@@ -235,11 +238,6 @@ class DQfDAgent(object):
                 if done:
                     print(f"{e} episode: reward is {test_episode_reward}, average is {np.mean(test_mean_episode_reward)}")
                     res.append(np.mean(test_mean_episode_reward))
-                    if (np.mean(test_mean_episode_reward) > 475) and (len(test_mean_episode_reward)==20):
-                        if self.use_per:
-                            plot_use_per.append(res)
-                        else:
-                            plot_not_use_per.append(res)
                 state = next_state
                 if e % self.frequency == 0:
                     self.target_network.load_state_dict(self.policy_network.state_dict())
@@ -248,6 +246,10 @@ class DQfDAgent(object):
                 print("END train function")
                 break
             ########### 5. DO NOT MODIFY FOR TESTING  ###########
+        if self.use_per:
+            plot_use_per.append(res)
+        else:
+            plot_not_use_per.append(res)
         ########### 6. DO NOT MODIFY FOR TESTING  ###########
         return test_min_episode, np.mean(test_mean_episode_reward)
         ########### 6. DO NOT MODIFY FOR TESTING  ###########
@@ -270,9 +272,7 @@ class Memory():
         state, action, reward, next_state, done, cnt = obj
         state = torch.from_numpy(state).to(agent.device)
         next_state = torch.from_numpy(next_state).to(agent.device)
-        self.td_errors[self.idx] = torch.norm(reward + (1.0 - done) * agent.gamma * \
-            agent.target_network(next_state) - \
-            agent.target_network(state)) + self.epsilon
+        self.td_errors[self.idx] = abs(reward + agent.gamma * agent.target_network(next_state).max() - agent.policy_network(state)[action]) + self.epsilon
         self.idx += 1
         self.max = max(self.max, self.idx-1)
         self.priority = torch.from_numpy(np.array(self.td_errors[:self.max+1], dtype=np.float))
@@ -291,22 +291,32 @@ class Memory():
         else:
             result = random.choices(self.container[:self.max+1], weights=self.priority)[0]
         return result
+    def plot_priority(self):
+        plt.plot(self.priority)
+        plt.show()
 
 
 def plot(use_per=False):
-    filename = f"./plot_use_per_{use_per}"
+    filename = f"./plot_use_per_{str(use_per).lower()}"
+    title = "original" if use_per else "simple"
     arr = plot_use_per if use_per else plot_not_use_per
+    cnt = 0
     for e in arr:
-        plt.plot(list(range(len(e))), e)
+        cnt += 1
+        plt.plot(e, label=f"{title} {cnt}")
+    plt.xlabel("Episode")
+    plt.ylabel("Average 20 latest step rewards")
+    plt.legend(loc='upper left')
+    plt.title(title)
+    plt.savefig(f"{filename}.png")
     plt.clf()
-    plt.savefig(filename)
 
 
 def eval_(use_per):
-    num_of_episode_list = []
+    num_of_episode_list = [] 
     n_episode = 250
 
-    for _ in range(5):
+    for i in range(5):
         # 환경 선언 
         env = gym.make('CartPole-v1')
         
@@ -318,7 +328,7 @@ def eval_(use_per):
         # DQfD agent train
         num_of_episode, mean_reward = dqfd_agent.train()
 
-        print("Minimum number of episodes for 475 : {}, Average of 20 episodes reward : {}".format(num_of_episode, mean_reward))
+        print("{} tries: Minimum number of episodes for 475 : {}, Average of 20 episodes reward : {}".format(i, num_of_episode, mean_reward))
         num_of_episode_list.append(num_of_episode)
         env.close()
 
@@ -326,8 +336,8 @@ def eval_(use_per):
 
 def main():
     eval_(use_per=False)
-    eval_(use_per=True)
     plot(use_per=False)
+    eval_(use_per=True)
     plot(use_per=True)
 
 if __name__ == '__main__':
