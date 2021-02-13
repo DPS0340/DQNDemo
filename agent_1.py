@@ -97,25 +97,14 @@ class DQfDAgent(object):
         for episode in range(self.n):
             state, action, reward, next_state, done, gain = minibatch[episode]
             state = torch.from_numpy(state).float().to(self.device)
+            state.requires_grad = True
             next_state = torch.from_numpy(next_state).float().to(self.device)
             next_state.requires_grad = True
             # double_dqn_loss 계산 #
-            Q = torch.Tensor([0]).to(self.device)
-            Q_prime = torch.Tensor([0]).to(self.device)
-            Q_max = torch.Tensor([0]).to(self.device)
-            Q_prime_max = torch.Tensor([0]).to(self.device)
-            Q.requires_grad = True
-            Q_prime.requires_grad = True
-            Q_max.requires_grad = True
-            Q_prime_max.requires_grad = True
-            self.target_network.eval()
-            self.policy_network.eval()
-            if not done:
-                Q = self.policy_network(state)
-                Q_prime = self.target_network(next_state)
-                Q_max = Q.max()
-                Q_prime_max = Q_prime.max()
-            double_dqn_loss = gain + self.gamma * Q_prime_max - Q_max
+            next_action = self.policy_network(next_state).argmax()
+            Q_target = self.target_network(next_state)[next_action]
+            Q_predict = self.policy_network(state)[action]
+            double_dqn_loss = reward + self.gamma * Q_target - Q_predict
             double_dqn_loss = torch.pow(double_dqn_loss, 2)
             def margin(action1, action2):
                 if action1 == action2:
@@ -126,7 +115,7 @@ class DQfDAgent(object):
             for selected_action in range(self.action_size):
                 expect = self.target_network(state)[selected_action]
                 partial_margin_classification_loss = max(partial_margin_classification_loss, expect + margin(action, selected_action))
-            margin_classification_loss = partial_margin_classification_loss - Q_max
+            margin_classification_loss = partial_margin_classification_loss - Q_predict
             # n-step returns 계산 #
             n_step_returns = torch.Tensor([reward]).to(self.device)
             current_n_step_next_state = next_state.detach().cpu().numpy()
@@ -136,7 +125,7 @@ class DQfDAgent(object):
                 if __done__:
                     break
                 n_step_returns = n_step_returns + (self.gamma ** exp) * current_n_step_reward
-            expect = self.target_network(torch.from_numpy(current_n_step_next_state).to(self.device)).max()
+            expect = self.target_network(torch.from_numpy(current_n_step_next_state).to(self.device))[action]
             partial_n_step_returns = (self.gamma ** 10) * expect
             n_step_returns = n_step_returns + partial_n_step_returns
             self.policy_network.train()
@@ -144,7 +133,8 @@ class DQfDAgent(object):
             self.policy_network.opt.zero_grad()
             # loss 계산 #
             # L2 정규화는 MSE로 대체 #
-            L2_loss = self.policy_network.loss(Q.argmax(), torch.tensor([action]).to(self.device).float())
+            L2_loss = self.policy_network.loss(Q_target, Q_predict)
+
             loss = double_dqn_loss + l1 * margin_classification_loss + l2 * n_step_returns + l3 * L2_loss
             # loss = double_dqn_loss + l1 * margin_classification_loss + l2 * n_step_returns
             loss.backward()
@@ -265,9 +255,9 @@ class Memory():
         state, action, reward, next_state, done, cnt = obj
         state = torch.from_numpy(state).to(agent.device)
         next_state = torch.from_numpy(next_state).to(agent.device)
-        self.td_errors[self.idx] = abs(reward + (1.0 - done) * agent.gamma * \
-            agent.target_network(next_state).max() - \
-            agent.target_network(state).max()) + self.epsilon
+        self.td_errors[self.idx] = torch.norm(reward + (1.0 - done) * agent.gamma * \
+            agent.target_network(next_state) - \
+            agent.target_network(state)) + self.epsilon
         self.idx += 1
         self.max = max(self.max, self.idx-1)
         self.priority = torch.from_numpy(np.array(self.td_errors[:self.max+1], dtype=np.float))
