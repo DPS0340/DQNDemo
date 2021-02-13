@@ -19,7 +19,7 @@ def get_demo_traj():
 ##########################################################################
 
 PRETRAIN_STEP = 1000
-MINIBATCH_SIZE = 50
+MINIBATCH_SIZE = 30
 RUNNING_MINIBATCH_SIZE = 20
 
 class DQfDNetwork(nn.Module):
@@ -36,9 +36,9 @@ class DQfDNetwork(nn.Module):
         self.loss = torch.nn.MSELoss()
 
     def forward(self,x):
-        x1 = F.relu(self.f1(x))
-        x2 = F.relu(self.f2(x1))
-        x3 = self.f3(x2)
+        x1 = F.dropout(F.relu(self.f1(x)))
+        x2 = F.dropout(F.relu(self.f2(x1)))
+        x3 = F.dropout(self.f3(x2))
         res = F.softmax(x3)
         return res
     
@@ -85,7 +85,7 @@ class DQfDAgent(object):
 
     def train_network(self, args=None, pretrain=False, minibatch_size=MINIBATCH_SIZE):
         # 람다값 임의로 설정 #
-        l1 = l2 = l3 = 0.2
+        l1 = l2 = l3 = 0.23
 
         if pretrain:
             self.n = minibatch_size
@@ -95,6 +95,8 @@ class DQfDAgent(object):
             minibatch = [args]
 
         for episode in range(self.n):
+            self.policy_network.eval()
+            self.target_network.eval()
             state, action, reward, next_state, done, gain = minibatch[episode]
             state = torch.from_numpy(state).float().to(self.device)
             state.requires_grad = True
@@ -129,6 +131,7 @@ class DQfDAgent(object):
             partial_n_step_returns = (self.gamma ** 10) * expect
             n_step_returns = n_step_returns + partial_n_step_returns
             self.policy_network.train()
+            self.target_network.train()
             # 오차역전파로 기울기 함수 학습 #
             self.policy_network.opt.zero_grad()
             # loss 계산 #
