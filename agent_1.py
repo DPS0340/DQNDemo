@@ -268,11 +268,14 @@ class Memory():
         self.priority = self.priority.shape[0] / self.priority
         self.priority = self.priority.numpy()
     def sample(self, sample_index=False, k=1):
-        choice = random.randint(0, self.max)
-        if sample_index:
-            result = random.randint(0, self.max-k+1)
-        else:
-            result = self.container[choice]
+        result = []
+        for _ in range(k):
+            if sample_index:
+                choice = random.randint(0, self.max-k+1)
+            else:
+                choice = random.randint(0, self.max)
+                choice = self.container[choice]
+            result.append(choice)
         return result
     def sample_original(self, sample_index=False, k=1):
         if sample_index:
@@ -295,7 +298,7 @@ def plot(use_per=False):
         plt.plot(e, label=f"{title} {cnt}")
     plt.xlabel("Episode")
     plt.ylabel("Average 20 latest step rewards")
-    plt.legend(loc='upper left')
+    # plt.legend(loc='upper left')
     plt.title(title)
     plt.savefig(f"{filename}.png")
     plt.clf()
