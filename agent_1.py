@@ -96,7 +96,7 @@ class DQfDAgent(object):
         # pretrain False로는 쓰지 않음 #
         if pretrain:
             self.n = minibatch_size
-            minibatch = self.sample_minibatch(self.n, continuous=False)
+            minibatch = self.sample_minibatch(self.n)
         else:
             self.n = 1
             minibatch = [args]
@@ -151,26 +151,9 @@ class DQfDAgent(object):
             torch.nn.utils.clip_grad_norm_(self.policy_network.parameters(), 1.0)
             self.policy_network.opt.step()
 
-    def sample_minibatch(self, n=1, continuous=False):
-        # softmax 함수 사용 #
-        if continuous:
-            sample_index = True
-        else:
-            sample_index = False
-        if continuous:
-            if self.use_per:
-                index = self.memory.sample_original(sample_index, k=n)
-            else:
-                index = self.memory.sample(sample_index, k=n)
-            return self.memory.container[index: index + n]
-        else:
-            result = []
-            for _ in range(n):
-                if self.use_per:
-                    choice = self.memory.sample_original(sample_index)
-                else:
-                    choice = self.memory.sample(sample_index)
-                result.append(choice)
+    def sample_minibatch(self, n=1):
+        sample_fn = self.memory.sample_original if self.use_per else self.memory.sample
+        result = sample_fn(k=n)
         return result
 
     def pretrain(self):
@@ -266,7 +249,7 @@ class Memory():
         self.max = 0
         self.epsilon = 0.001
         self.alpha = 2
-        self.beta = 0.5
+        self.beta = 0
     def push(self, obj, agent: DQfDAgent):
         if self.idx == self.length:
             self.idx = 0
@@ -279,9 +262,10 @@ class Memory():
         self.max = max(self.max, self.idx-1)
         self.priority = torch.from_numpy(np.array(self.td_errors[:self.max+1], dtype=np.float))
         self.priority = torch.pow(self.priority, self.alpha)
-        self.priority = F.softmax(self.priority)
-        self.priority = torch.pow(self.priority, -1)
+        sum_ = self.priority.sum()
+        self.priority = torch.pow(self.priority, -1) / sum_
         self.priority = torch.pow(self.priority, self.beta)
+        self.priority = self.priority.shape[0] / self.priority
         self.priority = self.priority.numpy()
     def sample(self, sample_index=False, k=1):
         choice = random.randint(0, self.max)
@@ -292,9 +276,9 @@ class Memory():
         return result
     def sample_original(self, sample_index=False, k=1):
         if sample_index:
-            result = random.choices(list(range(0, len(self.priority)-k+1)), weights=self.priority)[0]
+            result = random.choices(list(range(0, len(self.priority)-k+1)), weights=self.priority, k=k)
         else:
-            result = random.choices(self.container[:self.max+1], weights=self.priority)[0]
+            result = random.choices(self.container[:self.max+1], weights=self.priority, k=k)
         return result
     def plot_priority(self):
         plt.plot(self.priority)
