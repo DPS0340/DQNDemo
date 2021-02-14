@@ -265,6 +265,8 @@ class Memory():
         self.priority = [None for _ in range(length)]
         self.max = 0
         self.epsilon = 0.001
+        self.alpha = 2
+        self.beta = 0.5
     def push(self, obj, agent: DQfDAgent):
         if self.idx == self.length:
             self.idx = 0
@@ -276,7 +278,10 @@ class Memory():
         self.idx += 1
         self.max = max(self.max, self.idx-1)
         self.priority = torch.from_numpy(np.array(self.td_errors[:self.max+1], dtype=np.float))
+        self.priority = torch.pow(self.priority, self.alpha)
         self.priority = F.softmax(self.priority)
+        self.priority = torch.pow(self.priority, -1)
+        self.priority = torch.pow(self.priority, self.beta)
         self.priority = self.priority.numpy()
     def sample(self, sample_index=False, k=1):
         choice = random.randint(0, self.max)
@@ -335,8 +340,8 @@ def eval_(use_per):
     return np.mean(num_of_episode_list)
 
 def main():
-    eval_(use_per=False)
-    plot(use_per=False)
+    # eval_(use_per=False)
+    # plot(use_per=False)
     eval_(use_per=True)
     plot(use_per=True)
 
