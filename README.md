@@ -25,12 +25,14 @@ Contributions, issues and feature requests are welcome.<br />
 Feel free to check [issues page](https://github.com/DPS0340/DQNDemo/issues) if you want to contribute.<br />
 
 ## Demo
+![DQNDemo](https://user-images.githubusercontent.com/32592965/109403989-09729100-79a5-11eb-95eb-f2327e3078b9.gif)
 
 ## Output Graph
 ![simple DQN](https://github.com/DPS0340/DQNDemo/blob/master/plot_use_per_False.png)
 ![original DQN](https://github.com/DPS0340/DQNDemo/blob/master/plot_use_per_True.png)
 
 ### Simple vs Original
+
 Simple DQN does not have PER algorithm, select from uniform distribution and original is vice versa.
 
 ## Author
