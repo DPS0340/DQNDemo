@@ -327,8 +327,10 @@ def eval_(use_per):
     return np.mean(num_of_episode_list)
 
 def main():
-    # eval_(use_per=False)
-    # plot(use_per=False)
+    print("Simple mode")
+    eval_(use_per=False)
+    plot(use_per=False)
+    print("Original mode")
     eval_(use_per=True)
     plot(use_per=True)
 
