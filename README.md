@@ -34,7 +34,7 @@ Feel free to check [issues page](https://github.com/DPS0340/DQNDemo/issues) if y
 ### Simple vs Original
 
 Simple DQN does not have PER algorithm, it selects from uniform distribution.\
-original is vice versa.
+Original is vice versa.
 
 ## Author
 
