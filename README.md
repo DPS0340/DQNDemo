@@ -26,6 +26,12 @@ Feel free to check [issues page](https://github.com/DPS0340/DQNDemo/issues) if y
 
 ## Demo
 
+## Output Graph
+![simple DQN](https://github.com/DPS0340/DQNDemo/blob/master/plot_use_per_False.png)
+![original DQN](https://github.com/DPS0340/DQNDemo/blob/master/plot_use_per_True.png)
+
+### Simple vs Original
+Simple DQN does not have PER algorithm, select from uniform distribution and original is vice versa.
 
 ## Author
 
