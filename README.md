@@ -1,7 +1,7 @@
 <h1 align="center">Welcome to DQNDemo 👋</h1>
 <p>
   <a href="#" target="_blank">
-    <img alt="License: MIT License" src="https://img.shields.io/badge/License-MIT License-yellow.svg" />
+    <img alt="GitHub" src="https://img.shields.io/github/license/DPS0340/DQNDemo">
   </a>
 </p>
 
