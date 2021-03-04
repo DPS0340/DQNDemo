@@ -7,6 +7,8 @@
 
 > Deep Q-Learning from Demonstrations implementation using Pytorch & OpenAI Gym
 
+[Paper link](2018-Deep_Q-Learning_from_Demonstrations-AAAI-406.pdf)
+
 ## Install
 
 ```sh
