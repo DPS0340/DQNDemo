@@ -42,7 +42,6 @@ Original is vice versa.
 
 👤 **jiho lee**
 
-* Website: https://velog.io/@dps0340
 * Github: [@DPS0340](https://github.com/DPS0340)
 
 ## Show your support
